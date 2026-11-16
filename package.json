@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "db:check": "node scripts/check-db.mjs",
-    "db:seed": "node scripts/seed-db.mjs"
+    "db:seed": "node scripts/seed-db.mjs",
+    "dev:api": "node scripts/api-dev.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",
