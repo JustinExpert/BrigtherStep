@@ -128,3 +128,24 @@ export async function endSession(req) {
   }
   return cookie(req, SESSION_COOKIE, "", { maxAge: 0 });
 }
+
+/** Same rules as the app's sign-up form. Returns a list of problems; empty means OK. */
+export function passwordProblems(pw) {
+  const out = [];
+  if (typeof pw !== "string") return ["a password"];
+  if (pw.length < 8) out.push("at least 8 characters");
+  if (!/[a-z]/i.test(pw)) out.push("a letter");
+  if (!/\d/.test(pw)) out.push("a number");
+  if (pw.length > 128) out.push("at most 128 characters");
+  return out;
+}
+
+/** Stores a new password and signs out every other session of this user. */
+export async function setPassword(req, user, password) {
+  const db = await getDb();
+  const salt = crypto.randomBytes(16).toString("base64");
+  const passwordHash = hash(password, salt).toString("base64");
+  await db.collection("users").updateOne({ _id: user._id }, { $set: { salt, passwordHash }, $unset: { resetTokenHash: "", resetExpires: "" } });
+  const token = parseCookies(req)[SESSION_COOKIE];
+  await db.collection("sessions").deleteMany({ userId: user._id, _id: { $ne: token ? sha256(token) : "" } });
+}

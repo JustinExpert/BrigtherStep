@@ -27,8 +27,9 @@ import Backup from "./pages/Backup.jsx";
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
-  const { user } = useAuth();
+  const { user, checking } = useAuth();
   const location = useLocation();
+  if (checking) return <div role="status" style={{ padding: 32, color: "var(--muted)" }}>Loading…</div>;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <Layout />;
 }

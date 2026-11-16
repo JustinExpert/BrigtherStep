@@ -1,37 +1,34 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "./DataContext.jsx";
-import { EMAIL_RE, hashPassword, passwordProblems, randomToken, sha256, verifyPassword } from "./crypto.js";
+import { EMAIL_RE, hashPassword, passwordProblems, randomToken, sha256 } from "./crypto.js";
 import { todayIso } from "./utils.js";
 
 /*
- * DEMO AUTH — accounts live in this browser's storage (see DataContext).
- * Passwords are stored as salted PBKDF2 hashes, but everything still runs in the browser,
- * so this demonstrates the flows only. In production, move account checks to a server
- * (or Supabase/Firebase Auth), use httpOnly session cookies, and enforce roles server-side.
+ * Sign-in, sign-out, the session and password changes go through the server (/api/auth/*);
+ * the session is an HttpOnly cookie that browser JavaScript can't read.
+ * Still browser-only until the data moves to the server: registration, admin-created accounts,
+ * password reset and profile edits (they change this browser's copy of the users list).
  */
-const KEY = "brighterstep.session";
-const MAX_ATTEMPTS = 5;
-const LOCK_MS = 30_000;
 const RESET_MS = 30 * 60_000;
 const SELF_REGISTER_ROLES = ["student", "parent", "teacher"];
 
 const AuthContext = createContext(null);
 
-function readSession() {
-  for (const store of [sessionStorage, localStorage]) {
-    try {
-      const s = JSON.parse(store.getItem(KEY));
-      if (s?.userId) return s;
-    } catch { /* storage blocked */ }
+// Remove the browser-stored session left by earlier versions.
+try { sessionStorage.removeItem("brighterstep.session"); localStorage.removeItem("brighterstep.session"); } catch { /* storage blocked */ }
+
+/** Calls the auth API. Returns the JSON body; throws the server's error message on failure. */
+async function api(path, body) {
+  const init = body === undefined
+    ? { credentials: "same-origin" }
+    : { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  let res;
+  try { res = await fetch(`/api/auth/${path}`, init); } catch {
+    throw new Error("Can't reach the server. Check your connection and try again.");
   }
-  return null;
-}
-function writeSession(session, remember) {
-  try {
-    sessionStorage.removeItem(KEY);
-    localStorage.removeItem(KEY);
-    if (session) (remember ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(session));
-  } catch { /* storage blocked: session lasts until refresh */ }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+  return data;
 }
 
 /** The account without any secret fields — safe to hand to the UI. */
@@ -42,47 +39,33 @@ export function AuthProvider({ children }) {
   const { users, add, update } = useData();
   const usersRef = useRef(users);
   usersRef.current = users;
-  const [session, setSession] = useState(readSession);
-  const [attempts, setAttempts] = useState(0);
-  const [lockedUntil, setLockedUntil] = useState(0);
+  // The account the server says is signed in: undefined while checking, null when signed out.
+  const [serverUser, setServerUser] = useState(undefined);
 
-  const raw = session ? users.find((u) => u.id === session.userId) : null;
-  const active = raw && raw.status === "active" ? raw : null;
-  const user = useMemo(() => (active ? toPublic(active) : null), [active]);
-
-  // Sign out automatically if the account was deleted or deactivated.
   useEffect(() => {
-    if (session && !active) { setSession(null); writeSession(null); }
-  }, [session, active]);
+    let live = true;
+    api("me").then((d) => live && setServerUser(d.user), () => live && setServerUser(null));
+    return () => { live = false; };
+  }, []);
+
+  // Prefer this browser's copy of the account (it holds in-app edits such as the photo).
+  const local = serverUser ? users.find((u) => u.id === serverUser.id) : null;
+  const user = useMemo(() => (local ? toPublic(local) : serverUser || null), [local, serverUser]);
+  const checking = serverUser === undefined;
 
   const findByEmail = (email) => usersRef.current.find((u) => norm(u.email) === norm(email));
 
   const login = useCallback(async (email, password, remember) => {
-    if (Date.now() < lockedUntil) throw new Error(`Too many attempts. Try again in ${Math.ceil((lockedUntil - Date.now()) / 1000)}s.`);
-    const found = findByEmail(email);
-    // Always run the hash so a wrong email and a wrong password take the same time.
-    const ok = found ? await verifyPassword(password, found) : (await hashPassword(password), false);
-    if (!ok) {
-      const n = attempts + 1;
-      setAttempts(n);
-      if (n >= MAX_ATTEMPTS) {
-        setLockedUntil(Date.now() + LOCK_MS);
-        setAttempts(0);
-        throw new Error("Too many attempts. Login locked for 30 seconds.");
-      }
-      throw new Error("Incorrect email or password.");
-    }
-    setAttempts(0);
-    if (found.status === "pending") throw new Error("Your account is waiting for approval by the school admin.");
-    if (found.status === "inactive") throw new Error("This account has been deactivated. Please contact the school admin.");
-    update("users", found.id, { lastLogin: new Date().toISOString() });
-    const s = { userId: found.id };
-    setSession(s);
-    writeSession(s, remember);
-    return toPublic(found);
-  }, [attempts, lockedUntil, update]);
+    const { user: u } = await api("login", { email, password, remember: !!remember });
+    if (usersRef.current.some((x) => x.id === u.id)) update("users", u.id, { lastLogin: u.lastLogin || new Date().toISOString() });
+    setServerUser(u);
+    return u;
+  }, [update]);
 
-  const logout = useCallback(() => { setSession(null); writeSession(null); }, []);
+  const logout = useCallback(async () => {
+    setServerUser(null);
+    try { await api("logout", {}); } catch { /* the cookie still expires on its own */ }
+  }, []);
 
   /** Shared validation + hashing for new accounts (self-registration or admin-created). */
   const createAccount = useCallback(async ({ name, email, role, password, phone = "", idNumber = "", links = {} }, status) => {
@@ -130,21 +113,21 @@ export function AuthProvider({ children }) {
   }, [update]);
 
   const changePassword = useCallback(async (current, next) => {
-    if (!active || !(await verifyPassword(current, active))) throw new Error("Your current password is incorrect.");
     const problems = passwordProblems(next);
     if (problems.length) throw new Error(`New password needs ${problems.join(", ")}.`);
     if (current === next) throw new Error("Choose a password different from your current one.");
-    update("users", active.id, await hashPassword(next));
-  }, [active, update]);
+    await api("change-password", { current, next });
+  }, []);
 
+  const active = local;
   const updateProfile = useCallback((patch) => {
     if (!active) return;
     const allowed = ["name", "phone", "idNumber", "photo"];
     update("users", active.id, Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k))));
   }, [active, update]);
 
-  const value = useMemo(() => ({ user, login, logout, register, createUser, requestReset, resetPassword, changePassword, updateProfile }),
-    [user, login, logout, register, createUser, requestReset, resetPassword, changePassword, updateProfile]);
+  const value = useMemo(() => ({ user, checking, login, logout, register, createUser, requestReset, resetPassword, changePassword, updateProfile }),
+    [user, checking, login, logout, register, createUser, requestReset, resetPassword, changePassword, updateProfile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

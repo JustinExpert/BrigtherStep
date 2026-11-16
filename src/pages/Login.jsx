@@ -51,7 +51,7 @@ export const PasswordInput = ({ value, onChange, autoComplete = "current-passwor
 };
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, checking, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState(location.state?.email || "");
@@ -60,6 +60,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  if (checking) return null;
   if (user) return <Navigate to={homeFor(user.role)} replace />;
 
   const submit = async (e) => {
