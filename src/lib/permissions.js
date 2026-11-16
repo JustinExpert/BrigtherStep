@@ -30,6 +30,7 @@ export const MODULES = [
   { key: "attendance", label: "Attendance", group: "Academic" },
   { key: "grades", label: "Gradebook", group: "Academic" },
   { key: "notices", label: "Announcements", group: "Communication" },
+  { key: "reports", label: "Reports", group: "Communication" },
 ];
 
 const row = (superadmin, admin, teacher, student, parent) => ({ superadmin, admin, teacher, student, parent });
@@ -41,16 +42,17 @@ export const DEFAULT_PERMISSIONS = {
   teachers: row("edit", "edit", "view", "none", "none"),
   classes: row("edit", "edit", "view", "none", "none"),
   subjects: row("edit", "edit", "view", "view", "view"),
-  routine: row("view", "view", "view", "view", "view"),
+  routine: row("edit", "edit", "view", "view", "view"),
   assignments: row("edit", "edit", "view", "none", "none"),
   attendance: row("edit", "edit", "edit", "none", "none"),
   grades: row("edit", "edit", "edit", "none", "none"),
   notices: row("edit", "edit", "edit", "view", "view"),
+  reports: row("edit", "edit", "view", "none", "none"),
 };
 
 // Modules that list other people's records — students and parents must never get these.
 // (Students and parents see their own grades on the Report Card page instead of the gradebook.)
-const PRIVATE_LISTS = ["school", "users", "roles", "students", "teachers", "attendance", "grades"];
+const PRIVATE_LISTS = ["school", "users", "roles", "students", "teachers", "attendance", "grades", "reports"];
 
 /**
  * Cells that can't be changed: the Super Admin always keeps full access, only admins can manage

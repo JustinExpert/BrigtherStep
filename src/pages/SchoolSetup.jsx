@@ -6,7 +6,7 @@ import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
 import { SUBJECTS } from "../data.js";
-import { COMPONENTS, weightsFor, weightTotal } from "../lib/gradeCalc.js";
+import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
 
 function validate(s) {
   const errs = [];
@@ -16,6 +16,8 @@ function validate(s) {
   if (!s.academicYear.label.trim()) errs.push("Academic year needs a label (e.g. 2026–2027).");
   if (!s.academicYear.start || !s.academicYear.end || s.academicYear.start >= s.academicYear.end) errs.push("Academic year must end after it starts.");
   if (!(s.passingMark >= 0 && s.passingMark <= 100)) errs.push("Passing mark must be between 0 and 100.");
+  if (s.strands.some((x) => !x.trim())) errs.push("Strand names can't be empty.");
+  if (new Set(s.strands.map((x) => x.trim().toUpperCase())).size !== s.strands.length) errs.push("Strand names must be unique.");
   const g = s.grading;
   if (!g.length) errs.push("Add at least one grade.");
   if (g.some((r) => !r.grade.trim())) errs.push("Every grade needs a letter or name.");
@@ -36,7 +38,24 @@ export default function SchoolSetup() {
   const { toast } = useUI();
   const can = usePermission();
   const canEdit = can("school", "edit");
-  const [s, setS] = useState(() => ({ ...structuredClone(school), weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, { ...weightsFor(school, sub) }])) }));
+  const [s, setS] = useState(() => ({
+    ...structuredClone(school),
+    strands: [...(school.strands || [])],
+    transmutation: !!school.transmutation,
+    weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, { ...weightsFor(school, sub) }])),
+  }));
+  const [newStrand, setNewStrand] = useState("");
+  const addStrand = () => {
+    const v = newStrand.trim().toUpperCase();
+    if (!v) return;
+    if (s.strands.some((x) => x.toUpperCase() === v)) return toast(`${v} is already in the list`);
+    setS({ ...s, strands: [...s.strands, v] });
+    setNewStrand("");
+  };
+  const applyDeped = () => {
+    setS({ ...s, grading: DEPED_SCALE.map((g) => ({ ...g })), passingMark: 75, transmutation: true });
+    toast("DepEd grading applied — click Save changes to keep it");
+  };
   const setWeight = (subject, k, v) => setS({ ...s, weights: { ...s.weights, [subject]: { ...s.weights[subject], [k]: v } } });
   const [errors, setErrors] = useState([]);
   const set = (k) => (e) => setS({ ...s, [k]: e.target.value });
@@ -52,6 +71,8 @@ export default function SchoolSetup() {
       passingMark: Number(s.passingMark),
       grading: s.grading.map((g) => ({ grade: g.grade.trim(), min: Number(g.min), remark: g.remark.trim() })).sort((a, b) => b.min - a.min),
       weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, Object.fromEntries(COMPONENTS.map((c) => [c.key, Number(s.weights[sub][c.key])]))])),
+      strands: s.strands.map((x) => x.trim()),
+      transmutation: !!s.transmutation,
     };
     const errs = validate(clean);
     setErrors(errs);
@@ -98,10 +119,36 @@ export default function SchoolSetup() {
         </div>
 
         <div className="card">
-          <div className="card-head">
-            <div><h3>Grading system</h3><p>A score gets the highest grade whose minimum it reaches.</p></div>
-            <label className="marks">Passing mark (%) <input className="input" type="number" min="0" max="100" value={s.passingMark} onChange={set("passingMark")} /></label>
+          <div className="card-head"><div><h3>Senior High strands</h3><p>Pick one per class on the Class page. Junior High classes have no strand.</p></div></div>
+          <div className="chips" style={{ marginTop: 0 }}>
+            {s.strands.map((x, i) => (
+              <span className="chip" key={x + i}>{x}
+                {canEdit && <button type="button" aria-label={`Remove ${x}`} onClick={() => setS({ ...s, strands: s.strands.filter((_, j) => j !== i) })}>×</button>}
+              </span>
+            ))}
+            {!s.strands.length && <small className="hint">No strands yet.</small>}
           </div>
+          {canEdit && (
+            <div className="inline-add">
+              <input className="input" maxLength={20} placeholder="e.g. Sports" value={newStrand} aria-label="New strand"
+                onChange={(e) => setNewStrand(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStrand(); } }} />
+              <button type="button" className="btn sm light" onClick={addStrand}><Icon name="plus" />Add strand</button>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <div><h3>Grading system</h3><p>A grade gets the highest level whose minimum it reaches.</p></div>
+            <div className="row-actions" style={{ gap: 12, flexWrap: "wrap" }}>
+              <label className="marks">Passing mark <input className="input" type="number" min="0" max="100" value={s.passingMark} onChange={set("passingMark")} /></label>
+              {canEdit && <button type="button" className="btn sm light" onClick={applyDeped}>Use DepEd grading</button>}
+            </div>
+          </div>
+          <label className="toggle-row">
+            <span className="switch"><input type="checkbox" checked={s.transmutation} onChange={(e) => setS({ ...s, transmutation: e.target.checked })} /><span /></span>
+            <span><b>Apply the DepEd transmutation table</b><small>Converts each quarterly initial grade (e.g. 60.00) into the transmuted grade (75) before it goes on the report card. Teachers then publish again to update report cards.</small></span>
+          </label>
           <div className="table-wrap">
             <table>
               <thead><tr><th className="no-sort">Grade</th><th className="no-sort">From (%)</th><th className="no-sort">Remark</th><th className="no-sort" /></tr></thead>

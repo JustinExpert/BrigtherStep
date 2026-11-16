@@ -19,22 +19,65 @@ export function useScope() {
   }, [user, assignments, teachers]);
 }
 
+export const WHOLE_SCHOOL = "Whole school";
+const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? aud.replace(/^Class /, "") : null);
+
+/**
+ * Announcements this person may see: admins see all; everyone else sees whole-school ones plus
+ * those for their classes (teacher: classes they teach; student: own class; parent: children's).
+ * Pass a student to get what that student sees (used on a parent's child overview).
+ */
+export function useVisibleNotices(forStudent) {
+  const { user } = useAuth();
+  const { notices, students } = useData();
+  const scope = useScope();
+  return useMemo(() => {
+    let classes;
+    if (forStudent) classes = [forStudent.class];
+    else if (ADMINS.includes(user.role)) return notices;
+    else if (user.role === "teacher") classes = scope.classes;
+    else if (user.role === "student") classes = students.filter((s) => s.id === user.studentId).map((s) => s.class);
+    else classes = students.filter((s) => (user.childIds || []).includes(s.id)).map((s) => s.class);
+    return notices.filter((n) => { const c = audienceClass(n.audience); return !c || classes.includes(c); });
+  }, [forStudent, user, notices, students, scope.classes]);
+}
+
 /** Name of the teacher assigned to a subject in a class. */
 export function teacherFor(assignments, teachers, cls, subject) {
   const a = assignments.find((x) => x.class === cls && x.subject === subject);
   return (a && teachers.find((t) => t.id === a.teacherId)?.name) || "—";
 }
 
-/** A teacher's own weekly timetable: [day][period] → { class, subject } or null. */
-export function teacherWeek(assignments, teacherId) {
+/**
+ * A teacher's own weekly timetable: [day][period] → { class, subject, clash } or null.
+ * `clash` lists any other classes they are booked in at the same time.
+ */
+export function teacherWeek(routine, assignments, teacherId) {
   const mine = assignments.filter((a) => a.teacherId === teacherId);
   return DATA.DAYS.map((_, d) => DATA.PERIODS.map((_, p) => {
-    for (const [cls, week] of Object.entries(DATA.routine)) {
-      const subject = week[d][p].subject;
-      if (mine.some((a) => a.class === cls && a.subject === subject)) return { class: cls, subject };
-    }
-    return null;
+    const hits = Object.entries(routine)
+      .filter(([cls, week]) => week[d][p].subject && mine.some((a) => a.class === cls && a.subject === week[d][p].subject))
+      .map(([cls, week]) => ({ class: cls, subject: week[d][p].subject }));
+    return hits.length ? { ...hits[0], clash: hits.slice(1) } : null;
   }));
+}
+
+/** Subjects a class takes (from its timetable), in first-seen order. */
+export const subjectsOf = (routine, cls) => [...new Set((routine[cls] || []).flat().map((s) => s.subject).filter(Boolean))];
+
+/**
+ * If putting `subject` into class `cls` at (day, period) would double-book its teacher,
+ * returns { teacherId, class } of the other booking; otherwise null.
+ */
+export function findClash(routine, assignments, cls, day, period, subject) {
+  const a = subject && assignments.find((x) => x.class === cls && x.subject === subject);
+  if (!a) return null;
+  for (const [other, week] of Object.entries(routine)) {
+    if (other === cls) continue;
+    const s = week[day][period].subject;
+    if (s && assignments.some((x) => x.class === other && x.subject === s && x.teacherId === a.teacherId)) return { teacherId: a.teacherId, class: other, subject: s };
+  }
+  return null;
 }
 
 export const termLabel = (key) => TERMS.find((t) => t.key === key)?.label || key;

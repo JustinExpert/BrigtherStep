@@ -27,7 +27,7 @@ export function ReportCardView({ student, showPrint = true }) {
           <small>{school.name} · {school.address}</small>
           <h2>Report Card · {school.academicYear.label}</h2>
         </div>
-        {showPrint && <button className="btn light sm print-hide" onClick={() => window.print()}><Icon name="notice" />Print</button>}
+        {showPrint && <button className="btn light sm print-hide" onClick={() => window.print()}><Icon name="printer" />Print</button>}
       </div>
       <div className="rc-student">
         <Avatar name={student.name} color={student.color} />

@@ -41,6 +41,11 @@ const students = Array.from({ length: 64 }, (_, i) => {
   };
 });
 
+// Roll numbers: unique within each class, in alphabetical order.
+CLASSES.forEach((c) => students.filter((s) => s.class === c).sort((a, b) => a.name.localeCompare(b.name)).forEach((s, i) => { s.roll = "#" + pad(i + 1); }));
+
+export const STRANDS = ["STEM", "ABM", "HUMSS", "GAS", "TVL"];
+
 const teachers = [
   ["Grace Okafor", "Female", "Mathematics"], ["Daniel Cruz", "Male", "Science"], ["Hannah Kim", "Female", "English"],
   ["Ravi Patel", "Male", "Computer"], ["Elena Rossi", "Female", "History"], ["Marcus Brown", "Male", "Geography"],
@@ -58,15 +63,16 @@ const teachers = [
 }));
 
 const notices = [
-  { id: "N1", type: "teacher", title: "New Teacher", body: "Please welcome Owen Silva, who joins the Science department this week.", date: "2026-11-16", author: "Admin" },
-  { id: "N2", type: "event", title: "Parent–Teacher Conference", body: "Parent–teacher conferences are on November 21. Please book a slot with your child’s class teacher.", date: "2026-11-15", author: "Admin" },
-  { id: "N3", type: "course", title: "New Course", body: "An after-school robotics course opens for classes 04–06. Sign up at the office.", date: "2026-11-10", author: "Admin" },
-  { id: "N4", type: "event", title: "Science Fair", body: "The annual science fair will be held in the main hall on November 28.", date: "2026-11-06", author: "Daniel Cruz" },
-  { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. Check your class timetable for any changes.", date: "2026-11-02", author: "Exams Office" },
+  { id: "N1", type: "teacher", title: "New Teacher", body: "Please welcome Owen Silva, who joins the Science department this week.", date: "2026-11-16", author: "Admin", audience: "Whole school" },
+  { id: "N2", type: "event", title: "Parent–Teacher Conference", body: "Parent–teacher conferences are on November 21. Please book a slot with your child’s class teacher.", date: "2026-11-15", author: "Admin", audience: "Whole school" },
+  { id: "N3", type: "course", title: "New Course", body: "An after-school robotics course opens for classes 04–06. Sign up at the office.", date: "2026-11-10", author: "Admin", audience: "Whole school" },
+  { id: "N4", type: "event", title: "Science Fair", body: "The annual science fair will be held in the main hall on November 28.", date: "2026-11-06", author: "Daniel Cruz", audience: "Whole school" },
+  { id: "N6", type: "event", title: "Class 02 Field Trip", body: "Class 02 visits the Science Museum on November 25. Bring the signed permission slip by Friday.", date: "2026-11-14", author: "Grace Okafor", audience: "Class 02" },
+  { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. Check your class timetable for any changes.", date: "2026-11-02", author: "Exams Office", audience: "Whole school" },
 ];
 
 const classes = CLASSES.map((c, i) => ({
-  id: "CLS-" + c, name: "Class " + c, section: pick(["A", "B"]), teacher: teachers[i].name, room: "R-" + (101 + i), capacity: 40,
+  id: "CLS-" + c, name: "Class " + c, section: pick(["A", "B"]), strand: { "05": "STEM", "06": "HUMSS" }[c] || "", teacher: teachers[i].name, room: "R-" + (101 + i), capacity: 40,
 }));
 
 const subjects = SUBJECTS.map((s, i) => ({
@@ -78,10 +84,29 @@ const subjects = SUBJECTS.map((s, i) => ({
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const PERIODS = ["08:00", "08:50", "09:40", "10:50", "11:40", "12:30"];
-const routine = Object.fromEntries(CLASSES.map((c) => [c, DAYS.map(() => PERIODS.map(() => {
-  const s = pick(SUBJECTS);
-  return { subject: s }; // the teacher comes from the class/subject teaching assignment
-}))]));
+// Who teaches a subject in a class: subjects with two teachers are split, 01–03 → first, 04–06 → second.
+const teacherOf = (cls, subject) => {
+  const options = teachers.filter((t) => t.subject === subject);
+  return options[CLASSES.indexOf(cls) < 3 ? 0 : options.length - 1] || teachers[0];
+};
+// Clash-free timetable: in every period each teacher is in at most one class, and each class
+// gets every subject about equally often (max 2 of the same subject a day).
+const routine = Object.fromEntries(CLASSES.map((c) => [c, DAYS.map(() => PERIODS.map(() => ({ subject: "" })))]));
+const weekly = Object.fromEntries(CLASSES.map((c) => [c, Object.fromEntries(SUBJECTS.map((s) => [s, 0]))]));
+DAYS.forEach((_, d) => PERIODS.forEach((_, p) => {
+  const busy = new Set();
+  const order = [...CLASSES].sort(() => rnd() - 0.5);
+  order.forEach((cls) => {
+    const todayCount = (s) => routine[cls][d].filter((x) => x.subject === s).length;
+    const free = SUBJECTS.filter((s) => !busy.has(teacherOf(cls, s).id) && todayCount(s) < 2);
+    const pool = free.length ? free : SUBJECTS;
+    const least = Math.min(...pool.map((s) => weekly[cls][s]));
+    const subject = pick(pool.filter((s) => weekly[cls][s] === least));
+    routine[cls][d][p] = { subject }; // the teacher comes from the class/subject teaching assignment
+    weekly[cls][subject]++;
+    busy.add(teacherOf(cls, subject).id);
+  });
+}));
 
 const attendanceChart = {
   labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -93,10 +118,9 @@ const attendanceChart = {
 // Subjects with two teachers are split: classes 01–03 get the first, 04–06 the second.
 const assignments = [];
 CLASSES.forEach((cls, ci) => {
-  [...new Set(routine[cls].flat().map((s) => s.subject))].forEach((subject) => {
-    const options = teachers.filter((t) => t.subject === subject);
-    const teacher = options[ci < 3 ? 0 : options.length - 1] || teachers[0];
-    assignments.push({ id: `ASG-${cls}-${subject.replace(/W+/g, "")}`, class: cls, subject, teacherId: teacher.id });
+  [...new Set(routine[cls].flat().map((s) => s.subject).filter(Boolean))].forEach((subject) => {
+    const teacher = teacherOf(cls, subject);
+    assignments.push({ id: `ASG-${cls}-${subject.replace(/\W+/g, "")}`, class: cls, subject, teacherId: teacher.id });
   });
 });
 
@@ -121,7 +145,7 @@ assignments.forEach((a) => {
   const level = Object.fromEntries(pupils.map((s) => [s.id, s.percent + int(-10, 10)])); // ability in this subject
   ["Q1", "Q2"].forEach((term) => {
     const acts = TEMPLATES.map(([component, title, maxScore], i) => ({
-      id: `ACT-${a.class}-${a.subject.replace(/W+/g, "")}-${term}-${i + 1}`, class: a.class, subject: a.subject, term,
+      id: `ACT-${a.class}-${a.subject.replace(/\W+/g, "")}-${term}-${i + 1}`, class: a.class, subject: a.subject, term,
       component, title, maxScore, date: DATES[term][i], createdBy: a.teacherId,
       scores: Object.fromEntries(pupils.map((s) => [s.id, Math.round((maxScore * Math.max(40, Math.min(100, level[s.id] + int(-8, 8)))) / 100)])),
     }));
@@ -167,6 +191,8 @@ const school = {
   academicYear: { label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
   passingMark: 60,
   weights: structuredClone(DEFAULT_WEIGHTS), // grade component weights (%) per subject
+  transmutation: false, // apply the DepEd transmutation table to quarterly grades
+  strands: [...STRANDS],
   grading: [
     { grade: "A", min: 90, remark: "Outstanding" },
     { grade: "B", min: 80, remark: "Very good" },

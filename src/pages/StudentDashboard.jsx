@@ -6,7 +6,7 @@ import { fmtDate } from "../lib/utils.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
-import { buildReport, teacherFor } from "../lib/scope.js";
+import { buildReport, subjectsOf, teacherFor, useVisibleNotices } from "../lib/scope.js";
 
 const STATUS = { P: ["Present", "b-green"], A: ["Absent", "b-red"], L: ["Late", "b-amber"] };
 
@@ -23,9 +23,8 @@ export const MissingRecord = () => (
 );
 
 /** Subjects a class takes (from its timetable) with the assigned teacher for each. */
-export function classSubjects(cls, assignments, teachers) {
-  return [...new Set((DATA.routine[cls] || []).flat().map((s) => s.subject))]
-    .map((subject) => ({ subject, teacher: teacherFor(assignments, teachers, cls, subject) }));
+export function classSubjects(routine, cls, assignments, teachers) {
+  return subjectsOf(routine, cls).map((subject) => ({ subject, teacher: teacherFor(assignments, teachers, cls, subject) }));
 }
 
 /** Attendance marks saved by teachers for one student, newest first. */
@@ -45,12 +44,13 @@ export default function StudentDashboard() {
 /** One student's overview. Used by the student themself and (with parentView) by their parent. */
 export function StudentOverview({ me, parentView = false }) {
   const data = useData();
-  const { notices, attendance, teachers, classes, school, assignments } = data;
+  const { attendance, teachers, classes, school, assignments, routine } = data;
+  const notices = useVisibleNotices(me); // whole-school + this student's class
   const { average } = buildReport(me, data); // general average of published grades
   const grade = average === null ? null : gradeFor(school, average);
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
-  const today = DATA.routine[me.class]?.[dayIdx] || [];
-  const subjects = classSubjects(me.class, assignments, teachers);
+  const today = routine[me.class]?.[dayIdx] || [];
+  const subjects = classSubjects(routine, me.class, assignments, teachers);
   const classTeacher = teachers.find((t) => t.class === me.class);
   const section = classes.find((c) => c.name === "Class " + me.class)?.section;
   const log = attendanceLog(attendance, me);

@@ -2,13 +2,14 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { DATA } from "../data.js";
-import { teacherWeek, useScope } from "../lib/scope.js";
+import { teacherWeek, useScope, useVisibleNotices } from "../lib/scope.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
-  const { students, notices, teachers, grades, assignments } = useData();
+  const { students, teachers, grades, assignments, routine } = useData();
+  const notices = useVisibleNotices();
   const scope = useScope();
   // Admins previewing this page see the first teacher's view.
   const me = teachers.find((t) => t.id === user.teacherId) || (user.role !== "teacher" ? teachers[0] : null);
@@ -18,8 +19,8 @@ export default function TeacherDashboard() {
   const classes = [...new Set([...mine.map((a) => a.class), me.class])].sort();
   const myStudents = students.filter((s) => classes.includes(s.class));
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
-  const today = teacherWeek(assignments, me.id)[dayIdx];
-  const periodsOf = (a) => DATA.routine[a.class].flat().filter((s) => s.subject === a.subject).length;
+  const today = teacherWeek(routine, assignments, me.id)[dayIdx];
+  const periodsOf = (a) => routine[a.class].flat().filter((s) => s.subject === a.subject).length;
   const drafts = grades.filter((g) => !g.published && mine.some((a) => a.class === g.class && a.subject === g.subject)).length;
   const attention = myStudents.filter((s) => s.attendance < 88);
 

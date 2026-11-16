@@ -57,12 +57,36 @@ export function computeGrade(activities, studentId, weights) {
       usedWeight += Number(weights[c.key]) || 0;
     }
   }
-  const grade = usedWeight > 0 ? round1(weighted / usedWeight) : null;
+  // Full precision: rounding happens once, when shown or put on the report card (no double rounding).
+  const grade = usedWeight > 0 ? weighted / usedWeight : null;
   return { components, grade, entered, total: activities.length };
 }
 
-/** Whole-number grade that goes on the report card. */
-export const reportGrade = (grade) => (grade === null ? null : Math.round(grade));
+/**
+ * DepEd transmutation table (DepEd Order No. 8, s. 2015): initial grade → transmuted grade.
+ * 60–100 maps to 75–100 in steps of 1.6; 0–59.99 maps to 60–74 in steps of 4.
+ * e.g. 100 → 100, 98.40 → 99, 60.00 → 75, 59.99 → 74, 0 → 60.
+ */
+export function transmute(initial) {
+  if (initial === null || initial === undefined) return null;
+  const g = Math.max(0, Math.min(100, initial));
+  return g >= 60 ? Math.min(100, 75 + Math.floor((g - 60) / 1.6 + 1e-9)) : 60 + Math.floor(g / 4 + 1e-9);
+}
+
+/**
+ * The quarterly grade shown to students: the transmuted grade when the school uses the DepEd
+ * table, otherwise the weighted percentage rounded to a whole number.
+ */
+export const reportGrade = (grade, school) => (grade === null ? null : school?.transmutation ? transmute(grade) : Math.round(grade));
+
+/** DepEd descriptors with passing mark 75 — applied by "Use DepEd grading" in School Setup. */
+export const DEPED_SCALE = [
+  { grade: "O", min: 90, remark: "Outstanding" },
+  { grade: "VS", min: 85, remark: "Very Satisfactory" },
+  { grade: "S", min: 80, remark: "Satisfactory" },
+  { grade: "FS", min: 75, remark: "Fairly Satisfactory" },
+  { grade: "DME", min: 0, remark: "Did Not Meet Expectations" },
+];
 
 /** Score must be a number from 0 to the activity's max (up to one decimal place). */
 export const validScore = (v, max) => v === "" || (/^\d+(\.\d)?$/.test(String(v)) && Number(v) >= 0 && Number(v) <= Number(max));

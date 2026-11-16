@@ -2,9 +2,11 @@ import { useState } from "react";
 
 /**
  * fields: [{ key, label, type?: text|email|tel|number|date|select|textarea, options?, required?, full? }]
+ * Select options are plain strings, or { value, label } when the stored value differs from the text shown.
  */
+const optValue = (o) => (typeof o === "object" ? o.value : o);
 export default function RecordForm({ fields, initial = {}, submitLabel = "Save", onSubmit, onCancel }) {
-  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, initial[f.key] ?? (f.type === "select" ? f.options[0] : "")])));
+  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, initial[f.key] ?? (f.type === "select" ? optValue(f.options[0]) : "")])));
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
 
   const submit = (e) => {
@@ -25,7 +27,7 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
             {f.label}{f.required && " *"}
             {f.type === "select" ? (
               <select className="select" value={v[f.key]} onChange={set(f.key)}>
-                {f.options.map((o) => <option key={o}>{o}</option>)}
+                {f.options.map((o) => <option key={optValue(o)} value={optValue(o)}>{typeof o === "object" ? o.label : o}</option>)}
               </select>
             ) : f.type === "textarea" ? (
               <textarea value={v[f.key]} onChange={set(f.key)} required={f.required} maxLength={1000} />

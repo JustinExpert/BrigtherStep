@@ -45,13 +45,14 @@ export function Teachers() {
 }
 
 export function Classes() {
-  const { students, teachers } = useData();
+  const { students, teachers, school } = useData();
   return (
     <CrudPage
       collection="classes" module="classes" title="Class" singular="Class" listTitle="All Classes"
       fields={[
         { key: "name", label: "Class name", required: true },
-        { key: "section", label: "Section", type: "select", options: ["A", "B", "C"] },
+        { key: "section", label: "Section", type: "select", options: ["A", "B", "C", "D", "E"] },
+        { key: "strand", label: "Strand (Senior High)", type: "select", options: [{ value: "", label: "None (Junior High)" }, ...(school.strands || []).map((s) => ({ value: s, label: s }))] },
         { key: "teacher", label: "Class teacher", type: "select", options: teachers.map((t) => t.name) },
         { key: "room", label: "Room", required: true },
         { key: "capacity", label: "Capacity", type: "number", min: 1 },
@@ -59,6 +60,7 @@ export function Classes() {
       cols={[
         { key: "name", label: "Class", render: (r) => <b>{r.name}</b> },
         { key: "section", label: "Section" },
+        { key: "strand", label: "Strand", render: (r) => (r.strand ? <Badge value={r.strand} cls="b-purple" /> : <span className="muted">—</span>) },
         { key: "teacher", label: "Class Teacher" },
         { key: "room", label: "Room" },
         { key: "students", label: "Students", sortable: false, render: (r) => {

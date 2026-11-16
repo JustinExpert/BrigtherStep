@@ -32,7 +32,7 @@ export const PageHead = ({ title, crumbs = [], children }) => (
 
 export const StatTile = ({ label, value, icon, tone }) => (
   <div className={`stat-tile tone-${tone}`}>
-    <div><span>{label}</span><b>{value}</b></div>
+    <div><span>{label}</span><b className={String(value).length > 12 ? "long" : undefined}>{value}</b></div>
     <Icon name={icon} />
   </div>
 );

@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { usePermission } from "../lib/usePermission.js";
+import { downloadCsv } from "../lib/utils.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import DataTable from "./DataTable.jsx";
@@ -13,7 +14,7 @@ import { PageHead } from "./ui.jsx";
  */
 export default function CrudPage({
   collection, title, listTitle, singular, crumbs, fields, cols, filter, onView,
-  module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id, rowFilter, subtitle,
+  module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id, rowFilter, subtitle, csv,
 }) {
   const data = useData();
   const can = usePermission();
@@ -51,6 +52,11 @@ export default function CrudPage({
         cols={cols}
         filter={filter}
         searchPlaceholder={searchPlaceholder}
+        tools={csv && (
+          <button className="btn light sm" onClick={() => { downloadCsv(csv.filename, csv.header, rows.map(csv.row)); toast("CSV downloaded"); }}>
+            <Icon name="download" />Export CSV
+          </button>
+        )}
         initialQuery={location.state?.q || ""}
         actions={{ onView, ...(canEdit ? { onEdit: openForm, onDelete: del } : {}) }}
         onBulkDelete={canEdit ? (ids, done) => confirm(`Delete ${ids.length} records?`, "This cannot be undone.", () => {

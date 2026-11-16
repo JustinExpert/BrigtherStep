@@ -4,7 +4,7 @@ import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
-import { COMPONENTS, computeGrade, reportGrade, validScore, weightsFor } from "../lib/gradeCalc.js";
+import { COMPONENTS, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
 import { TERMS } from "../data.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
@@ -90,11 +90,13 @@ export default function Gradebook() {
 
   const invalidCount = acts.reduce((n, act) => n + list.filter((s) => !isValid(act, s.id)).length, 0);
   const dirty = acts.some((act) => list.some((s) => typed(act, s.id) !== (act.scores?.[s.id] ?? "").toString()));
+  // The grade students get: transmuted when the school uses the DepEd table, else the weighted %.
+  const shown = (g) => (g === null ? null : school.transmutation ? transmute(g) : g);
   const graded = list.filter((s) => computed[s.id].grade !== null);
-  const avg = graded.length ? graded.reduce((a, s) => a + computed[s.id].grade, 0) / graded.length : null;
-  const passed = graded.filter((s) => computed[s.id].grade >= school.passingMark).length;
+  const avg = graded.length ? graded.reduce((a, s) => a + shown(computed[s.id].grade), 0) / graded.length : null;
+  const passed = graded.filter((s) => shown(computed[s.id].grade) >= school.passingMark).length;
   const isPublished = list.some((s) => rec(s.id)?.published);
-  const upToDate = list.every((s) => !rec(s.id)?.published || rec(s.id).score === reportGrade(savedComputed[s.id].grade));
+  const upToDate = list.every((s) => !rec(s.id)?.published || rec(s.id).score === reportGrade(savedComputed[s.id].grade, school));
   const status = !isPublished ? "Not published" : upToDate && !dirty ? "Published" : "Changes not published";
   const teacherName = teachers.find((t) => t.id === current.teacherId)?.name || "—";
 
@@ -121,7 +123,7 @@ export default function Gradebook() {
       setEdits({});
       upsertMany("grades", graded.map((s) => ({
         id: `${s.id}|${current.subject}|${term}`, studentId: s.id, class: current.class, subject: current.subject, term,
-        score: reportGrade(computed[s.id].grade), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
+        score: reportGrade(computed[s.id].grade, school), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
       })));
       const n = `${graded.length} grade${graded.length === 1 ? "" : "s"}`;
       toast(`Published ${n} — students and parents can see them now`);
@@ -203,6 +205,7 @@ export default function Gradebook() {
         <div className="formula">
           <b>Quarterly grade</b> =
           {groups.map((g, i) => <span key={g.key}>{i > 0 && " + "}<span className={`chip-${g.key}`}>{g.label} × {g.weight}%</span></span>)}
+          {school.transmutation && <span>→ <span className="chip-QA">DepEd transmutation table</span></span>}
         </div>
         <p className="hint">
           Teacher: <b>{teacherName}</b> · Passing mark {school.passingMark}% · Component % = points earned ÷ points possible.
@@ -256,8 +259,8 @@ export default function Gradebook() {
                 {groups.map((g) => (
                   <th key={g.key} className={`no-sort grp grp-${g.key}`} colSpan={g.acts.length + 1}>{g.label} · {g.weight}%</th>
                 ))}
-                <th className="no-sort" rowSpan={2}>Grade</th>
-                <th className="no-sort" rowSpan={2}>Report card</th>
+                <th className="no-sort" rowSpan={2}>Grade{school.transmutation && <small className="th-sub">transmuted</small>}</th>
+                <th className="no-sort" rowSpan={2}>Report<small className="th-sub">card</small></th>
               </tr>
               <tr>
                 {groups.map((g) => [
@@ -274,9 +277,10 @@ export default function Gradebook() {
             <tbody>
               {list.length ? list.map((s) => {
                 const c = computed[s.id];
-                const g = c.grade === null ? null : gradeFor(school, c.grade);
+                const value = shown(c.grade);
+                const g = value === null ? null : gradeFor(school, value);
                 const r = rec(s.id);
-                const final = reportGrade(c.grade);
+                const final = reportGrade(c.grade, school);
                 return (
                   <tr key={s.id}>
                     <td className="stu"><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>Roll {s.roll}</small></div></div></td>
@@ -293,7 +297,7 @@ export default function Gradebook() {
                       }),
                       <td key={grp.key + "-pct"} className="pct">{fmt(c.components[grp.key])}</td>,
                     ])}
-                    <td className="final">{c.grade === null ? "—" : <><b>{fmt(c.grade)}</b> <Badge value={g.grade} cls={c.grade >= school.passingMark ? "b-green" : "b-red"} /></>}</td>
+                    <td className="final">{c.grade === null ? "—" : <><b>{fmt(value)}</b> <Badge value={g.grade} cls={value >= school.passingMark ? "b-green" : "b-red"} />{school.transmutation && <small className="initial">initial {fmt(c.grade)}</small>}</>}</td>
                     <td>
                       {r?.published
                         ? (r.score === final ? <Badge value={`${r.score} ✓`} cls="b-green" /> : <Badge value={`${r.score} → ${final ?? "—"}`} cls="b-amber" />)

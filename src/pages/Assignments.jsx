@@ -2,20 +2,20 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
-import { CLASSES, DATA, SUBJECTS } from "../data.js";
+import { CLASSES, SUBJECTS } from "../data.js";
 import { PageHead, StatTile } from "../components/ui.jsx";
 
 const NONE = "";
 
 export default function Assignments() {
   const { user } = useAuth();
-  const { assignments, teachers, students, upsertMany, remove } = useData();
+  const { assignments, teachers, students, upsertMany, remove, routine } = useData();
   const { toast } = useUI();
   const canEdit = usePermission()("assignments", "edit");
   const find = (cls, subject) => assignments.find((a) => a.class === cls && a.subject === subject);
   const name = (id) => teachers.find((t) => t.id === id)?.name || "—";
   // Subjects each class actually takes (from its timetable).
-  const takes = (cls, subject) => DATA.routine[cls].flat().some((s) => s.subject === subject);
+  const takes = (cls, subject) => routine[cls].flat().some((s) => s.subject === subject);
 
   const assign = (cls, subject, teacherId) => {
     const current = find(cls, subject);

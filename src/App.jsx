@@ -22,6 +22,8 @@ import Notice from "./pages/Notice.jsx";
 import Assignments from "./pages/Assignments.jsx";
 import Gradebook from "./pages/Gradebook.jsx";
 import ReportCard from "./pages/ReportCard.jsx";
+import Reports from "./pages/Reports.jsx";
+import Backup from "./pages/Backup.jsx";
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
@@ -86,6 +88,8 @@ export default function App() {
         {guard("attendance", "view", "/attendance", <Attendance />)}
         {guard("grades", "view", "/grades", <Gradebook />)}
         {guard("notices", "view", "/notice", <Notice />)}
+        {guard("reports", "view", "/reports", <Reports />)}
+        {guard("school", "edit", "/backup", <Backup />)}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

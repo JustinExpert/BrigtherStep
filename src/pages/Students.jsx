@@ -37,6 +37,11 @@ export default function Students() {
       listTitle={scope.all ? undefined : `Classes you teach: ${scope.classes.map((c) => "Class " + c).join(", ") || "none yet"}`}
       rowFilter={scope.all ? undefined : (s) => scope.inScope(s.class)}
       fields={STUDENT_FIELDS} defaults={newStudentDefaults()}
+      csv={{
+        filename: `students-${new Date().toISOString().slice(0, 10)}.csv`,
+        header: ["Roll", "Name", "ID", "Class", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
+        row: (s) => [s.roll, s.name, s.id, s.class, s.gender, s.dob, s.parent, s.phone, s.email, s.address],
+      }}
       searchPlaceholder="Search by name or roll"
       filter={{ key: "class", label: "All classes", options: scope.classes }}
       onView={(r) => navigate(`/students/${r.id}`)}

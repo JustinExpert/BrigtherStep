@@ -6,6 +6,7 @@ import { homeFor, useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
+import { useVisibleNotices } from "../lib/scope.js";
 import { ADMINS, ROLE_COLOR, ROLE_LABEL, STAFF } from "../lib/permissions.js";
 import { relTime } from "../lib/utils.js";
 
@@ -25,6 +26,7 @@ export const NAV = [
     { to: "/school-setup", label: "School Setup", module: "school" },
     { to: "/users", label: "User Management", module: "users" },
     { to: "/roles", label: "Roles & Permissions", module: "roles" },
+    { to: "/backup", label: "Backup & Restore", module: "school", need: "edit" },
   ]},
   { label: "Students", icon: "cap", children: [
     { to: "/students", label: "All Students", module: "students" },
@@ -43,6 +45,7 @@ export const NAV = [
   { to: "/routine", label: "Routine", icon: "calendar", module: "routine" },
   { to: "/attendance", label: "Attendance", icon: "list", module: "attendance" },
   { to: "/notice", label: "Announcements", icon: "notice", module: "notices" },
+  { to: "/reports", label: "Reports", icon: "chart", module: "reports" },
 ];
 export const ALL_ROUTES = NAV.flatMap((n) => (n.children ? n.children : [n]));
 
@@ -87,7 +90,8 @@ function useClickAway(onAway) {
 
 function TopBar({ onMenu }) {
   const { user, logout } = useAuth();
-  const { notices, students, teachers, resetData } = useData();
+  const { students, teachers, resetData } = useData();
+  const notices = useVisibleNotices(); // only announcements meant for this person
   const { toast, confirm } = useUI();
   const can = usePermission();
   const navigate = useNavigate();
