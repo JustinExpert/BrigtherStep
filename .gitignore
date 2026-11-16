@@ -1,0 +1,7 @@
+node_modules
+dist
+legacy-vanilla
+legacy-react-ai
+.env
+.env.*
+*.log
