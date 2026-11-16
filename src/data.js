@@ -1,5 +1,6 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
+import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
 let seed = 11;
 const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -104,23 +105,39 @@ export const TERMS = [
   { key: "Q1", label: "1st Quarter" }, { key: "Q2", label: "2nd Quarter" },
   { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
 ];
-// Q1 is published for everyone. Q2 is published too, except Mathematics in classes 01–03,
-// which is saved as a draft so the demo teacher has grades to review and publish.
+// Activities per class, subject and quarter, grouped into weighted components. The quarterly
+// grade is computed from them. Q1 and Q2 have scores; Q2 Mathematics in classes 01–03 is not
+// published yet so the demo teacher has grades to review and publish.
+const TEMPLATES = [
+  ["WW", "Quiz 1", 20], ["WW", "Quiz 2", 20], ["WW", "Seatwork", 10],
+  ["PT", "Group Project", 50], ["PT", "Performance Task", 40], ["QA", "Quarterly Exam", 60],
+];
+const DATES = { Q1: ["2026-09-04", "2026-09-18", "2026-09-25", "2026-10-02", "2026-10-09", "2026-10-21"],
+  Q2: ["2026-10-30", "2026-11-06", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"] };
+const activities = [];
 const grades = [];
-students.forEach((s) => {
-  assignments.filter((a) => a.class === s.class).forEach((a) => {
-    ["Q1", "Q2"].forEach((term) => {
-      const draft = term === "Q2" && a.subject === "Mathematics" && ["01", "02", "03"].includes(s.class);
+assignments.forEach((a) => {
+  const pupils = students.filter((s) => s.class === a.class);
+  const level = Object.fromEntries(pupils.map((s) => [s.id, s.percent + int(-10, 10)])); // ability in this subject
+  ["Q1", "Q2"].forEach((term) => {
+    const acts = TEMPLATES.map(([component, title, maxScore], i) => ({
+      id: `ACT-${a.class}-${a.subject.replace(/W+/g, "")}-${term}-${i + 1}`, class: a.class, subject: a.subject, term,
+      component, title, maxScore, date: DATES[term][i], createdBy: a.teacherId,
+      scores: Object.fromEntries(pupils.map((s) => [s.id, Math.round((maxScore * Math.max(40, Math.min(100, level[s.id] + int(-8, 8)))) / 100)])),
+    }));
+    activities.push(...acts);
+    const draft = term === "Q2" && a.subject === "Mathematics" && ["01", "02", "03"].includes(a.class);
+    pupils.forEach((s) => {
+      const { grade } = computeGrade(acts, s.id, DEFAULT_WEIGHTS[a.subject]);
       grades.push({
         id: `${s.id}|${a.subject}|${term}`, studentId: s.id, class: s.class, subject: a.subject, term,
-        score: Math.max(55, Math.min(100, s.percent + int(-12, 12))), published: !draft,
-        updatedBy: a.teacherId, updatedAt: term === "Q1" ? "2026-10-24" : "2026-11-14",
+        score: reportGrade(grade), published: !draft, updatedBy: a.teacherId, updatedAt: DATES[term][5],
       });
     });
   });
 });
 
-export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS, assignments, grades };
+export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS, assignments, grades, activities };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.
@@ -149,6 +166,7 @@ const school = {
   website: "https://brighterstep.test",
   academicYear: { label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
   passingMark: 60,
+  weights: structuredClone(DEFAULT_WEIGHTS), // grade component weights (%) per subject
   grading: [
     { grade: "A", min: 90, remark: "Outstanding" },
     { grade: "B", min: 80, remark: "Very good" },

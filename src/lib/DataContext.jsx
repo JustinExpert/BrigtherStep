@@ -5,8 +5,8 @@ import { DEFAULT_PERMISSIONS, MODULES, ROLES } from "./permissions.js";
 // Store with generic CRUD per collection, saved to this browser's localStorage so changes
 // survive a refresh. Each browser/device has its own copy — nothing is shared between users.
 // To use a real backend, replace these functions with API calls.
-const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades"];
-const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-" };
+const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities"];
+const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-", activities: "ACT-" };
 const STORAGE_KEY = "brighterstep.data.v1";
 
 const SOURCE = { ...DATA, users: SEED.users };

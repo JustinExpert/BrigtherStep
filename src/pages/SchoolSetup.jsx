@@ -5,6 +5,8 @@ import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
+import { SUBJECTS } from "../data.js";
+import { COMPONENTS, weightsFor, weightTotal } from "../lib/gradeCalc.js";
 
 function validate(s) {
   const errs = [];
@@ -21,6 +23,11 @@ function validate(s) {
   if (g.some((r) => !(r.min >= 0 && r.min <= 100))) errs.push("Grade minimums must be between 0 and 100.");
   if (new Set(g.map((r) => Number(r.min))).size !== g.length) errs.push("Two grades can't start at the same percentage.");
   if (!g.some((r) => Number(r.min) === 0)) errs.push("One grade must start at 0% so every score gets a grade.");
+  for (const subject of SUBJECTS) {
+    const wt = s.weights[subject];
+    if (COMPONENTS.some((c) => !(wt[c.key] >= 0 && wt[c.key] <= 100))) errs.push(`${subject}: each weight must be between 0 and 100.`);
+    else if (weightTotal(wt) !== 100) errs.push(`${subject}: weights add up to ${weightTotal(wt)}%, they must total 100%.`);
+  }
   return errs;
 }
 
@@ -29,7 +36,8 @@ export default function SchoolSetup() {
   const { toast } = useUI();
   const can = usePermission();
   const canEdit = can("school", "edit");
-  const [s, setS] = useState(() => structuredClone(school));
+  const [s, setS] = useState(() => ({ ...structuredClone(school), weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, { ...weightsFor(school, sub) }])) }));
+  const setWeight = (subject, k, v) => setS({ ...s, weights: { ...s.weights, [subject]: { ...s.weights[subject], [k]: v } } });
   const [errors, setErrors] = useState([]);
   const set = (k) => (e) => setS({ ...s, [k]: e.target.value });
   const setYear = (k) => (e) => setS({ ...s, academicYear: { ...s.academicYear, [k]: e.target.value } });
@@ -43,6 +51,7 @@ export default function SchoolSetup() {
       academicYear: { ...s.academicYear, label: s.academicYear.label.trim() },
       passingMark: Number(s.passingMark),
       grading: s.grading.map((g) => ({ grade: g.grade.trim(), min: Number(g.min), remark: g.remark.trim() })).sort((a, b) => b.min - a.min),
+      weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, Object.fromEntries(COMPONENTS.map((c) => [c.key, Number(s.weights[sub][c.key])]))])),
     };
     const errs = validate(clean);
     setErrors(errs);
@@ -110,6 +119,43 @@ export default function SchoolSetup() {
             </table>
           </div>
           {canEdit && <button type="button" className="link" style={{ marginTop: 12 }} onClick={() => setS({ ...s, grading: [...s.grading, { grade: "", min: "", remark: "" }] })}>+ Add grade</button>}
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <h3>Grade components &amp; weights</h3>
+              <p>Teachers record activities under each component. A subject's quarterly grade = each component's % × its weight. Each row must total 100%.</p>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table className="weights-table">
+              <thead>
+                <tr>
+                  <th className="no-sort">Subject</th>
+                  {COMPONENTS.map((c) => <th key={c.key} className="no-sort" title={c.hint}>{c.label} (%)</th>)}
+                  <th className="no-sort">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SUBJECTS.map((subject) => {
+                  const total = weightTotal(s.weights[subject]);
+                  return (
+                    <tr key={subject}>
+                      <td><b>{subject}</b></td>
+                      {COMPONENTS.map((c) => (
+                        <td key={c.key}>
+                          <input className="input" type="number" min="0" max="100" style={{ width: 90 }} value={s.weights[subject][c.key]}
+                            aria-label={`${subject} ${c.label} weight`} onChange={(e) => setWeight(subject, c.key, e.target.value)} />
+                        </td>
+                      ))}
+                      <td><span className={`badge ${total === 100 ? "b-green" : "b-red"}`}>{total}%</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </fieldset>
     </form>

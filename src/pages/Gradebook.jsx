@@ -4,35 +4,64 @@ import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
+import { COMPONENTS, computeGrade, reportGrade, validScore, weightsFor } from "../lib/gradeCalc.js";
 import { TERMS } from "../data.js";
 import { todayIso } from "../lib/utils.js";
+import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
 
-const valid = (v) => v === "" || (/^\d{1,3}$/.test(v) && Number(v) >= 0 && Number(v) <= 100);
+const ORDER = Object.fromEntries(COMPONENTS.map((c, i) => [c.key, i]));
+const fmt = (n) => (n === null || n === undefined ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+/** Add / edit an activity (title, component, max score, date). */
+function ActivityForm({ initial, onSave, onCancel, minMax = 1 }) {
+  const [f, setF] = useState(() => ({ title: "", component: "WW", maxScore: 20, date: todayIso(), ...initial }));
+  const [error, setError] = useState("");
+  const submit = (e) => {
+    e.preventDefault();
+    const max = Number(f.maxScore);
+    if (!f.title.trim()) return setError("Give the activity a title.");
+    if (!(Number.isInteger(max) && max >= 1 && max <= 1000)) return setError("Highest possible score must be a whole number from 1 to 1000.");
+    if (max < minMax) return setError(`Some students already scored up to ${minMax}, so the highest possible score can't be lower than that.`);
+    onSave({ title: f.title.trim(), component: f.component, maxScore: max, date: f.date });
+  };
+  return (
+    <form className="form" onSubmit={submit}>
+      {error && <div className="alert error" role="alert">{error}</div>}
+      <div className="form-grid">
+        <label style={{ gridColumn: "1 / -1" }}>Title *<input className="input" required maxLength={60} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Quiz 3, Science Project" /></label>
+        <label>Component
+          <select className="select" value={f.component} onChange={(e) => setF({ ...f, component: e.target.value })}>
+            {COMPONENTS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          </select>
+        </label>
+        <label>Highest possible score *<input className="input" type="number" min="1" max="1000" required value={f.maxScore} onChange={(e) => setF({ ...f, maxScore: e.target.value })} /></label>
+        <label>Date<input className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+      </div>
+      <p className="hint">{COMPONENTS.find((c) => c.key === f.component)?.hint}</p>
+      <div className="form-actions">
+        <button type="button" className="btn light" onClick={onCancel}>Cancel</button>
+        <button className="btn">{initial ? "Save activity" : "Add activity"}</button>
+      </div>
+    </form>
+  );
+}
 
 export default function Gradebook() {
   const { user } = useAuth();
-  const { students, grades, school, teachers, upsertMany } = useData();
-  const { toast, confirm } = useUI();
+  const { students, grades, activities, school, teachers, upsertMany, add, update, remove } = useData();
+  const { toast, confirm, openModal, closeModal } = useUI();
   const canEdit = usePermission()("grades", "edit");
   const scope = useScope();
   // Teachers pick from their own assignments; admins from all.
   const options = useMemo(() => [...scope.assignments].sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject)), [scope.assignments]);
   const [pick, setPick] = useState(() => options[0]?.id || "");
   const [term, setTerm] = useState("Q2");
+  const [edits, setEdits] = useState({}); // { activityId: { studentId: "typed value" } }
   const current = options.find((a) => a.id === pick) || options[0];
-  const list = current ? students.filter((s) => s.class === current.class).sort((a, b) => a.roll.localeCompare(b.roll)) : [];
-  const idOf = (sid) => `${sid}|${current.subject}|${term}`;
-  const saved = (sid) => grades.find((g) => g.id === idOf(sid));
-
-  const [scores, setScores] = useState({});
   const key = current ? `${current.id}|${term}` : "";
-  useEffect(() => {
-    if (!current) return;
-    setScores(Object.fromEntries(list.map((s) => [s.id, saved(s.id)?.score?.toString() ?? ""])));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, grades]);
+  useEffect(() => setEdits({}), [key]);
 
   if (!current) {
     return (
@@ -43,45 +72,101 @@ export default function Gradebook() {
     );
   }
 
-  const entered = list.filter((s) => scores[s.id] !== "" && scores[s.id] !== undefined);
-  const invalid = list.filter((s) => !valid(scores[s.id] ?? ""));
-  const nums = entered.filter((s) => valid(scores[s.id])).map((s) => Number(scores[s.id]));
-  const avg = nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : null;
-  const passed = nums.filter((n) => n >= school.passingMark).length;
-  const publishedCount = list.filter((s) => saved(s.id)?.published).length;
-  const allPublished = publishedCount > 0 && publishedCount === list.filter((s) => saved(s.id)).length;
-  const dirty = list.some((s) => (saved(s.id)?.score?.toString() ?? "") !== (scores[s.id] ?? ""));
+  const list = students.filter((s) => s.class === current.class).sort((a, b) => a.roll.localeCompare(b.roll) || a.name.localeCompare(b.name));
+  const acts = activities
+    .filter((a) => a.class === current.class && a.subject === current.subject && a.term === term)
+    .sort((a, b) => ORDER[a.component] - ORDER[b.component] || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+  const weights = weightsFor(school, current.subject);
+  const typed = (act, sid) => edits[act.id]?.[sid] ?? (act.scores?.[sid] ?? "").toString();
+  const isValid = (act, sid) => validScore(typed(act, sid), act.maxScore);
+  // Activities with the teacher's unsaved typing applied (invalid entries count as not entered).
+  const live = acts.map((act) => ({
+    ...act,
+    scores: Object.fromEntries(list.map((s) => [s.id, isValid(act, s.id) && typed(act, s.id) !== "" ? Number(typed(act, s.id)) : undefined])),
+  }));
+  const computed = Object.fromEntries(list.map((s) => [s.id, computeGrade(live, s.id, weights)]));
+  const savedComputed = Object.fromEntries(list.map((s) => [s.id, computeGrade(acts, s.id, weights)]));
+  const rec = (sid) => grades.find((g) => g.id === `${sid}|${current.subject}|${term}`);
+
+  const invalidCount = acts.reduce((n, act) => n + list.filter((s) => !isValid(act, s.id)).length, 0);
+  const dirty = acts.some((act) => list.some((s) => typed(act, s.id) !== (act.scores?.[s.id] ?? "").toString()));
+  const graded = list.filter((s) => computed[s.id].grade !== null);
+  const avg = graded.length ? graded.reduce((a, s) => a + computed[s.id].grade, 0) / graded.length : null;
+  const passed = graded.filter((s) => computed[s.id].grade >= school.passingMark).length;
+  const isPublished = list.some((s) => rec(s.id)?.published);
+  const upToDate = list.every((s) => !rec(s.id)?.published || rec(s.id).score === reportGrade(savedComputed[s.id].grade));
+  const status = !isPublished ? "Not published" : upToDate && !dirty ? "Published" : "Changes not published";
   const teacherName = teachers.find((t) => t.id === current.teacherId)?.name || "—";
 
-  const save = (publish) => {
-    if (invalid.length) return toast(`Fix ${invalid.length} invalid score${invalid.length > 1 ? "s" : ""} (whole numbers 0–100)`);
-    if (publish && !entered.length) return toast("Enter at least one score before publishing");
-    const records = entered.map((s) => ({
-      id: idOf(s.id), studentId: s.id, class: current.class, subject: current.subject, term,
-      score: Number(scores[s.id]), published: publish, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
-    }));
-    const apply = () => {
-      upsertMany("grades", records);
-      const n = `${records.length} grade${records.length === 1 ? "" : "s"}`;
-      toast(publish ? `Published ${n} — students and parents can see them now` : `Saved ${n} as draft`);
-    };
-    if (publish && entered.length < list.length) {
-      confirm("Publish with missing scores?", `${list.length - entered.length} student(s) have no score yet. Only entered scores will be published.`, apply, "Publish");
-    } else apply();
+  const setTyped = (actId, sid, v) => setEdits((e) => ({ ...e, [actId]: { ...e[actId], [sid]: v.trim() } }));
+  /** Activities with valid typed scores merged in, ready to store. */
+  const merged = () => acts.filter((act) => edits[act.id]).map((act) => {
+    const scores = { ...act.scores };
+    for (const [sid, v] of Object.entries(edits[act.id])) v === "" ? delete scores[sid] : (scores[sid] = Number(v));
+    return { ...act, scores };
+  });
+
+  const saveScores = () => {
+    if (invalidCount) return toast(`Fix ${invalidCount} invalid score${invalidCount > 1 ? "s" : ""} first (0 up to the highest possible score)`);
+    upsertMany("activities", merged());
+    setEdits({});
+    toast(isPublished ? "Scores saved — publish again to update report cards" : "Scores saved");
   };
+
+  const publish = () => {
+    if (invalidCount) return toast(`Fix ${invalidCount} invalid score${invalidCount > 1 ? "s" : ""} first`);
+    if (!graded.length) return toast("Enter some scores before publishing");
+    const apply = () => {
+      upsertMany("activities", merged());
+      setEdits({});
+      upsertMany("grades", graded.map((s) => ({
+        id: `${s.id}|${current.subject}|${term}`, studentId: s.id, class: current.class, subject: current.subject, term,
+        score: reportGrade(computed[s.id].grade), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
+      })));
+      const n = `${graded.length} grade${graded.length === 1 ? "" : "s"}`;
+      toast(`Published ${n} — students and parents can see them now`);
+    };
+    const missing = list.length - graded.length;
+    if (missing) confirm("Publish with missing grades?", `${missing} student(s) have no scores yet, so they won't get a grade for this quarter.`, apply, "Publish");
+    else apply();
+  };
+
   const unpublish = () => confirm("Unpublish grades?", "Students and parents will no longer see these grades until you publish again.", () => {
-    upsertMany("grades", list.filter((s) => saved(s.id)).map((s) => ({ ...saved(s.id), published: false })));
+    upsertMany("grades", list.filter((s) => rec(s.id)).map((s) => ({ ...rec(s.id), published: false })));
     toast("Grades moved back to draft");
   }, "Unpublish");
+
+  const addActivity = () => openModal("Add Activity", (
+    <ActivityForm onCancel={closeModal} onSave={(v) => {
+      add("activities", { ...v, class: current.class, subject: current.subject, term, scores: {}, createdBy: user.teacherId || user.id });
+      closeModal();
+      toast(`${v.title} added`);
+    }} />
+  ));
+  const editActivity = (act) => {
+    const highest = Math.max(0, ...Object.values(act.scores || {}).map(Number));
+    openModal("Edit Activity", (
+      <>
+        <ActivityForm initial={act} minMax={highest} onCancel={closeModal} onSave={(v) => { update("activities", act.id, v); closeModal(); toast("Activity updated"); }} />
+        <hr className="sep" />
+        <button className="btn light danger-text" onClick={() => confirm("Delete activity?", `"${act.title}" and all its scores will be removed. Grades will be recalculated.`, () => {
+          remove("activities", act.id);
+          toast("Activity deleted");
+        })}><Icon name="trash" />Delete this activity</button>
+      </>
+    ));
+  };
+
+  const groups = COMPONENTS.map((c) => ({ ...c, acts: acts.filter((a) => a.component === c.key), weight: Number(weights[c.key]) || 0 }));
 
   return (
     <>
       <PageHead title="Gradebook" crumbs={["Grades", "Gradebook"]}>
         {canEdit && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {allPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}
-            <button className="btn light" onClick={() => save(false)} disabled={!dirty}>Save draft</button>
-            <button className="btn" onClick={() => save(true)}>{allPublished && !dirty ? "Published ✓" : "Save & publish"}</button>
+            {isPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}
+            <button className="btn light" onClick={saveScores} disabled={!dirty}>Save scores</button>
+            <button className="btn" onClick={publish} disabled={status === "Published"}>{status === "Published" ? "Published ✓" : "Publish grades"}</button>
           </div>
         )}
       </PageHead>
@@ -100,49 +185,91 @@ export default function Gradebook() {
             </div>
           </div>
         </div>
-        <p className="hint" style={{ marginTop: 12 }}>
-          Teacher: <b>{teacherName}</b> · Passing mark {school.passingMark}% · {scope.all ? "You can grade every class." : "You only see classes you're assigned to."}
+        <div className="formula">
+          <b>Quarterly grade</b> =
+          {groups.map((g, i) => <span key={g.key}>{i > 0 && " + "}<span className={`chip-${g.key}`}>{g.label} × {g.weight}%</span></span>)}
+        </div>
+        <p className="hint">
+          Teacher: <b>{teacherName}</b> · Passing mark {school.passingMark}% · Component % = points earned ÷ points possible.
+          A blank score means "not entered yet" and is skipped; type 0 for missing work. {scope.all ? "" : "You only see classes you're assigned to."}
         </p>
       </div>
 
       <div className="stat-grid">
-        <StatTile label="Scores entered" value={`${entered.length} / ${list.length}`} icon="list" tone="purple" />
-        <StatTile label="Class average" value={avg === null ? "—" : `${avg}% · ${gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
-        <StatTile label="Passed" value={nums.length ? `${passed} / ${nums.length}` : "—"} icon="check" tone="green" />
-        <StatTile label="Status" value={publishedCount ? (allPublished ? "Published" : "Partly") : saved(list[0]?.id) ? "Draft" : "Not started"} icon="notice" tone="orange" />
+        <StatTile label="Activities" value={acts.length} icon="list" tone="purple" />
+        <StatTile label="Class average" value={avg === null ? "—" : `${fmt(Math.round(avg * 10) / 10)} · ${gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
+        <StatTile label="Passed" value={graded.length ? `${passed} / ${graded.length}` : "—"} icon="check" tone="green" />
+        <StatTile label="Report cards" value={status} icon="notice" tone="orange" />
       </div>
 
       <div className="card">
         <div className="card-head">
-          <div><h3>Class {current.class} · {current.subject} · {termLabel(term)}</h3><p>Enter whole-number scores from 0 to 100. The letter grade follows the school's grading scale.</p></div>
-          {dirty && <span className="badge b-amber">Unsaved changes</span>}
+          <div><h3>Class {current.class} · {current.subject} · {termLabel(term)}</h3><p>{list.length} students · {acts.length} activities</p></div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {dirty && <span className="badge b-amber">Unsaved changes</span>}
+            {canEdit && <button className="btn sm" onClick={addActivity}><Icon name="plus" />Add activity</button>}
+          </div>
         </div>
         <div className="table-wrap">
-          <table>
-            <thead><tr><th className="no-sort">Roll</th><th className="no-sort">Student</th><th className="no-sort">Score (%)</th><th className="no-sort">Grade</th><th className="no-sort">Remark</th><th className="no-sort">Status</th></tr></thead>
+          <table className="gb-table">
+            <thead>
+              <tr>
+                <th className="no-sort stu" rowSpan={2}>Student</th>
+                {groups.map((g) => (
+                  <th key={g.key} className={`no-sort grp grp-${g.key}`} colSpan={g.acts.length + 1}>{g.label} · {g.weight}%</th>
+                ))}
+                <th className="no-sort" rowSpan={2}>Grade</th>
+                <th className="no-sort" rowSpan={2}>Report card</th>
+              </tr>
+              <tr>
+                {groups.map((g) => [
+                  ...g.acts.map((a) => (
+                    <th key={a.id} className={`no-sort act grp-${g.key}`}>
+                      {canEdit ? <button type="button" className="act-btn" onClick={() => editActivity(a)} title="Edit activity">{a.title}<small>/{a.maxScore}</small></button>
+                        : <span className="act-btn">{a.title}<small>/{a.maxScore}</small></span>}
+                    </th>
+                  )),
+                  <th key={g.key + "-pct"} className={`no-sort pct grp-${g.key}`}>{g.short} %</th>,
+                ])}
+              </tr>
+            </thead>
             <tbody>
               {list.length ? list.map((s) => {
-                const v = scores[s.id] ?? "";
-                const ok = valid(v);
-                const g = v !== "" && ok ? gradeFor(school, Number(v)) : null;
-                const rec = saved(s.id);
+                const c = computed[s.id];
+                const g = c.grade === null ? null : gradeFor(school, c.grade);
+                const r = rec(s.id);
+                const final = reportGrade(c.grade);
                 return (
                   <tr key={s.id}>
-                    <td>{s.roll}</td>
-                    <td><div className="who"><Avatar name={s.name} color={s.color} />{s.name}</div></td>
+                    <td className="stu"><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>Roll {s.roll}</small></div></div></td>
+                    {groups.map((grp) => [
+                      ...grp.acts.map((a) => {
+                        const v = typed(a, s.id);
+                        const ok = isValid(a, s.id);
+                        return (
+                          <td key={a.id}>
+                            <input className={`input score-input ${ok ? "" : "invalid"}`} inputMode="decimal" maxLength={6} value={v} disabled={!canEdit}
+                              aria-label={`${a.title} score for ${s.name}`} aria-invalid={!ok} onChange={(e) => setTyped(a.id, s.id, e.target.value)} />
+                          </td>
+                        );
+                      }),
+                      <td key={grp.key + "-pct"} className="pct">{fmt(c.components[grp.key])}</td>,
+                    ])}
+                    <td className="final">{c.grade === null ? "—" : <><b>{fmt(c.grade)}</b> <Badge value={g.grade} cls={c.grade >= school.passingMark ? "b-green" : "b-red"} /></>}</td>
                     <td>
-                      <input className={`input score-input ${ok ? "" : "invalid"}`} inputMode="numeric" maxLength={3} value={v} disabled={!canEdit}
-                        aria-label={`Score for ${s.name}`} aria-invalid={!ok} onChange={(e) => setScores((m) => ({ ...m, [s.id]: e.target.value.trim() }))} />
+                      {r?.published
+                        ? (r.score === final ? <Badge value={`${r.score} ✓`} cls="b-green" /> : <Badge value={`${r.score} → ${final ?? "—"}`} cls="b-amber" />)
+                        : <Badge value={r ? "Draft" : "Not published"} cls="b-blue" />}
                     </td>
-                    <td>{g ? <Badge value={g.grade} cls={Number(v) >= school.passingMark ? "b-green" : "b-red"} /> : "—"}</td>
-                    <td>{g ? g.remark : ok ? "—" : <span style={{ color: "var(--red)", fontSize: 12 }}>0–100 only</span>}</td>
-                    <td>{rec ? <Badge value={rec.published ? "Published" : "Draft"} cls={rec.published ? "b-green" : "b-amber"} /> : <Badge value="Not entered" cls="b-blue" />}</td>
                   </tr>
                 );
-              }) : <tr><td colSpan="6" className="empty">No students in this class.</td></tr>}
+              }) : <tr><td colSpan={99} className="empty">No students in this class.</td></tr>}
             </tbody>
           </table>
         </div>
+        {!acts.length && (
+          <p className="empty">No activities for {termLabel(term)} yet.{canEdit && " Click “Add activity” to create a quiz, project or exam."}</p>
+        )}
       </div>
     </>
   );
