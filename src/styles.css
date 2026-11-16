@@ -318,3 +318,64 @@ tbody tr.selected { box-shadow: 0 6px 18px rgba(53,7,154,.08); position: relativ
 .grid-main > *, .grid-2 > *, .grid-profile > * { min-width: 0; }
 .grid-profile { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
 @media (max-width: 1280px) { .grid-profile { grid-template-columns: 1fr; } }
+
+/* ---------- Online exams ---------- */
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.inline-check { display: flex !important; align-items: center; gap: 10px; align-self: end; padding-bottom: 10px; }
+.q-card { display: grid; gap: 12px; }
+.q-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.q-head h3 { font-size: 16px; }
+.marks { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #55535b; }
+.marks .input { width: 70px; padding: 7px 10px; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.opt-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; }
+.opt-row .input { flex: 1; }
+.opt-row.is-answer { background: var(--green-100); }
+.opt-row .key, .choice .key {
+  width: 28px; height: 28px; flex: none; border-radius: 8px; background: var(--bg);
+  display: grid; place-items: center; font-weight: 600; font-size: 13px;
+}
+.opt-row.is-answer .key { background: var(--green); color: #fff; }
+.icon-btn:disabled { opacity: .35; cursor: default; background: none; }
+
+.exam-shell { display: grid; grid-template-columns: 1fr 280px; gap: 24px; align-items: start; }
+.exam-shell > * { min-width: 0; }
+.exam-side { position: sticky; top: 96px; }
+.exam-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.timer { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 8px 16px; border-radius: 12px; background: var(--primary-50); color: var(--primary); }
+.timer.low { background: var(--red-100); color: var(--red); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .6; } }
+.progress.wide { width: 100%; height: 6px; margin-bottom: 24px; }
+.q-text { font-size: 18px; line-height: 1.5; margin-bottom: 18px; }
+.q-text .badge { vertical-align: middle; margin-left: 6px; }
+.choice {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; margin-bottom: 10px;
+  border: 1.5px solid var(--line); border-radius: 12px; background: #fff; text-align: left; font-size: 15px;
+  transition: border-color .15s, background .15s;
+}
+button.choice:hover { border-color: var(--primary-100); background: var(--primary-50); }
+.choice.on { border-color: var(--primary); background: var(--primary-50); }
+.choice.on .key { background: var(--primary); color: #fff; }
+.choice.static { cursor: default; padding: 10px 14px; font-size: 14px; margin-bottom: 8px; }
+.choice.correct { border-color: var(--green); background: var(--green-100); }
+.choice.correct .key { background: var(--green); color: #fff; }
+.choice.wrong { border-color: var(--red); background: var(--red-100); }
+.choice.wrong .key { background: var(--red); color: #fff; }
+.choice .tag { margin-left: auto; font-size: 11px; font-weight: 600; opacity: .8; }
+.exam-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
+.palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.palette button { height: 40px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-weight: 500; }
+.palette button.answered { background: var(--primary-100); color: var(--primary); border-color: transparent; }
+.palette button.current { outline: 2px solid var(--primary); outline-offset: 1px; }
+.rules { margin: 0 0 22px; padding-left: 20px; line-height: 1.9; color: #55535b; }
+.review-list { display: grid; gap: 22px; }
+.review-item .q-head { margin-bottom: 10px; }
+.result-hero { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.result-score { width: 150px; height: 150px; border-radius: 50%; display: grid; place-content: center; text-align: center; flex: none; }
+.result-score b { font-size: 38px; }
+.result-score span { font-size: 13px; }
+@media (max-width: 960px) {
+  .exam-shell { grid-template-columns: 1fr; }
+  .exam-side { position: static; order: -1; }
+  .palette { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
+}

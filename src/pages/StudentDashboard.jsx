@@ -23,8 +23,10 @@ export const MissingRecord = () => (
 
 export default function StudentDashboard() {
   const me = useMyRecord();
-  const { exams, notices, attendance, teachers } = useData();
+  const { exams, notices, attendance, teachers, onlineExams, submissions } = useData();
   if (!me) return <MissingRecord />;
+  const pendingOnline = onlineExams.filter((e) => e.class === me.class && e.status === "published"
+    && !submissions.some((s) => s.examId === e.id && s.studentId === me.id && s.status === "submitted"));
 
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
   const today = DATA.routine[me.class]?.[dayIdx] || [];
@@ -50,6 +52,13 @@ export default function StudentDashboard() {
           <StatTile label="Term Fees" value={me.fees} icon="money" tone="green" />
         </div>
       </div>
+
+      {pendingOnline.length > 0 && (
+        <div className="alert info banner">
+          <span>📝 You have <b>{pendingOnline.length}</b> online exam{pendingOnline.length > 1 ? "s" : ""} to take: {pendingOnline.map((e) => e.title).join(", ")}.</span>
+          <Link className="btn sm" to="/online-exams">Go to online exams</Link>
+        </div>
+      )}
 
       <div className="grid-main">
         <div className="card">

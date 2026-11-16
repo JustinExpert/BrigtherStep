@@ -120,7 +120,67 @@ const messages = [
   { from: "Daniel Cruz", text: "The science fair room is booked.", time: "3h" },
 ];
 
-export const DATA = { students, teachers, notices, books, classes, subjects, exams, routes, rooms, routine, attendanceChart, messages, DAYS, PERIODS };
+// ---------- Online exams (multiple choice, auto-graded) ----------
+const q = (text, options, answer, marks = 1) => ({ id: "Q" + Math.floor(rnd() * 1e9).toString(36), text, options, answer, marks });
+const demoClass = students[0].class; // the demo student's class, so they have exams to take
+
+const onlineExams = [
+  {
+    id: "OE-1", title: "Numbers & Operations Quiz", subject: "Mathematics", class: demoClass, duration: 15,
+    status: "published", showAnswers: true, createdBy: "Grace Okafor", createdAt: "2026-11-12",
+    questions: [
+      q("7 + 8 = ?", ["13", "14", "15", "16"], 2),
+      q("36 ÷ 6 = ?", ["5", "6", "7", "8"], 1),
+      q("Which number is even?", ["15", "21", "28", "33"], 2),
+      q("9 × 4 = ?", ["32", "36", "38", "40"], 1),
+      q("What is half of 50?", ["20", "25", "30", "35"], 1),
+      q("How many sides does a hexagon have?", ["5", "6", "7", "8"], 1),
+      q("100 − 37 = ?", ["63", "67", "73", "77"], 0, 2),
+      q("Which number is the largest?", ["0.5", "0.45", "0.405", "0.054"], 0, 2),
+    ],
+  },
+  {
+    id: "OE-2", title: "Living Things & Matter", subject: "Science", class: demoClass, duration: 10,
+    status: "published", showAnswers: false, createdBy: "Daniel Cruz", createdAt: "2026-11-14",
+    questions: [
+      q("What do plants need to make their food?", ["Sunlight", "Sand", "Plastic", "Salt"], 0),
+      q("Which of these is a mammal?", ["Shark", "Dolphin", "Salmon", "Octopus"], 1),
+      q("At sea level, water boils at…", ["50 °C", "90 °C", "100 °C", "120 °C"], 2),
+      q("Which planet is closest to the Sun?", ["Venus", "Earth", "Mercury", "Mars"], 2),
+      q("Which gas do we need to breathe in to live?", ["Oxygen", "Carbon dioxide", "Helium", "Nitrogen"], 0),
+      q("Ice is water in which state?", ["Gas", "Liquid", "Solid", "Plasma"], 2),
+    ],
+  },
+  {
+    id: "OE-3", title: "Grammar Check", subject: "English", class: "04", duration: 12,
+    status: "draft", showAnswers: true, createdBy: "Hannah Kim", createdAt: "2026-11-15",
+    questions: [
+      q('What is the plural of "child"?', ["childs", "children", "childes", "child's"], 1),
+      q("Which word is a verb?", ["quickly", "happy", "run", "blue"], 2),
+      q('What is the opposite of "ancient"?', ["old", "modern", "broken", "large"], 1),
+      q("Choose the correct sentence.", ["She don't like apples.", "She doesn't like apples.", "She not like apples.", "She doesn't likes apples."], 1),
+      q('Which word means the same as "begin"?', ["end", "start", "stop", "finish"], 1),
+    ],
+  },
+];
+
+// Sample submissions from the demo student's classmates (not the demo student).
+const submissions = [];
+for (const exam of onlineExams.filter((e) => e.status !== "draft")) {
+  students.filter((s) => s.class === exam.class && s.id !== students[0].id).forEach((s, i) => {
+    if (rnd() > (exam.id === "OE-1" ? 0.85 : 0.4)) return;
+    const answers = exam.questions.map((qq) => (rnd() < s.percent / 100 ? qq.answer : (qq.answer + int(1, qq.options.length - 1)) % qq.options.length));
+    const score = exam.questions.reduce((a, qq, k) => a + (answers[k] === qq.answer ? qq.marks : 0), 0);
+    const total = exam.questions.reduce((a, qq) => a + qq.marks, 0);
+    submissions.push({
+      id: `RES-${exam.id}-${i}`, examId: exam.id, studentId: s.id, status: "submitted", answers, score, total,
+      startedAt: Date.parse("2026-11-15T09:00:00"), submittedAt: `2026-11-15T09:${pad(int(5, 14))}:00`,
+      timeTaken: int(180, exam.duration * 60 - 20), tabSwitches: rnd() < 0.15 ? int(1, 3) : 0, auto: false,
+    });
+  });
+}
+
+export const DATA = { students, teachers, notices, books, classes, subjects, exams, routes, rooms, routine, attendanceChart, messages, DAYS, PERIODS, onlineExams, submissions };
 
 // Demo accounts. In a real system, credentials are checked by a server, never stored in browser code.
 export const DEMO_USERS = [

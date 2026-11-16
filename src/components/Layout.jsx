@@ -34,7 +34,10 @@ export const NAV = [
   { to: "/subject", label: "Subject", icon: "subject", roles: EVERYONE },
   { to: "/routine", label: "Routine", icon: "calendar", roles: EVERYONE },
   { to: "/attendance", label: "Attendance", icon: "list", roles: STAFF },
-  { to: "/exam", label: "Exam", icon: "exam", roles: EVERYONE },
+  { label: "Exam", icon: "exam", children: [
+    { to: "/exam", label: "Exam Schedule", roles: EVERYONE },
+    { to: "/online-exams", label: "Online Exams", roles: EVERYONE },
+  ]},
   { to: "/notice", label: "Notice", icon: "notice", roles: EVERYONE },
   { to: "/transport", label: "Transport", icon: "bus", roles: ADMIN },
   { to: "/hostel", label: "Hostel", icon: "building", roles: ADMIN },

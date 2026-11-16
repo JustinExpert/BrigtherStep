@@ -11,6 +11,10 @@ import Fees from "./pages/Fees.jsx";
 import Routine from "./pages/Routine.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import Notice from "./pages/Notice.jsx";
+import OnlineExams from "./pages/OnlineExams.jsx";
+import ExamBuilder from "./pages/ExamBuilder.jsx";
+import ExamResults from "./pages/ExamResults.jsx";
+import TakeExam, { ExamReview } from "./pages/TakeExam.jsx";
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
@@ -42,11 +46,14 @@ export default function App() {
         <Route path="/routine" element={<Routine />} />
         <Route path="/exam" element={<Exams />} />
         <Route path="/notice" element={<Notice />} />
+        <Route path="/online-exams" element={<OnlineExams />} />
 
         {/* Students only */}
         <Route element={<RequireRole roles={["student"]} />}>
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/profile" element={<MyProfile />} />
+          <Route path="/online-exams/:id/take" element={<TakeExam />} />
+          <Route path="/online-exams/:id/review" element={<ExamReview />} />
         </Route>
 
         {/* Admin + teachers */}
@@ -57,6 +64,9 @@ export default function App() {
           <Route path="/teachers" element={<Teachers />} />
           <Route path="/class" element={<Classes />} />
           <Route path="/attendance" element={<Attendance />} />
+          <Route path="/online-exams/new" element={<ExamBuilder />} />
+          <Route path="/online-exams/:id/edit" element={<ExamBuilder key="edit" />} />
+          <Route path="/online-exams/:id/results" element={<ExamResults />} />
         </Route>
 
         {/* Admin only */}
