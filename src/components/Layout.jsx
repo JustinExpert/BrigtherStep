@@ -5,53 +5,63 @@ import { Avatar, FEED_TONES } from "./ui.jsx";
 import { homeFor, useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
+import { ADMINS, ROLE_COLOR, ROLE_LABEL, STAFF } from "../lib/permissions.js";
 import { DATA } from "../data.js";
 import { relTime } from "../lib/utils.js";
 
-const ADMIN = ["admin"];
-export const STAFF = ["admin", "teacher"];
-const EVERYONE = ["admin", "teacher", "student"];
-
+/*
+ * Each link is shown when the user's role is in `roles`, or when the permission matrix
+ * allows `module` at level `need` (default "view").
+ */
 export const NAV = [
   { label: "Home", icon: "home", children: [
-    { to: "/", label: "Admin", roles: ADMIN },
+    { to: "/", label: "Admin", roles: ADMINS },
     { to: "/teacher", label: "Teacher", roles: STAFF },
     { to: "/student", label: "My Dashboard", roles: ["student"] },
     { to: "/profile", label: "My Profile", roles: ["student"] },
+    { to: "/parent", label: "My Children", roles: ["parent"] },
+  ]},
+  { label: "Administration", icon: "shield", children: [
+    { to: "/school-setup", label: "School Setup", module: "school" },
+    { to: "/users", label: "User Management", module: "users" },
+    { to: "/roles", label: "Roles & Permissions", module: "roles" },
   ]},
   { label: "Students", icon: "cap", children: [
-    { to: "/students", label: "All Students", roles: STAFF },
-    { to: "/students/new", label: "Admission Form", roles: ADMIN },
+    { to: "/students", label: "All Students", module: "students" },
+    { to: "/students/new", label: "Admission Form", module: "students", need: "edit" },
   ]},
   { label: "Teachers", icon: "teachers", children: [
-    { to: "/teachers", label: "All Teachers", roles: STAFF },
+    { to: "/teachers", label: "All Teachers", module: "teachers" },
   ]},
-  { to: "/library", label: "Library", icon: "book", roles: EVERYONE },
-  { label: "Account", icon: "account", roles: ADMIN, children: [
-    { to: "/account/fees", label: "Fees Collection", roles: ADMIN },
+  { to: "/library", label: "Library", icon: "book", module: "library" },
+  { label: "Account", icon: "account", children: [
+    { to: "/account/fees", label: "Fees Collection", module: "fees" },
   ]},
-  { to: "/class", label: "Class", icon: "class", roles: STAFF },
-  { to: "/subject", label: "Subject", icon: "subject", roles: EVERYONE },
-  { to: "/routine", label: "Routine", icon: "calendar", roles: EVERYONE },
-  { to: "/attendance", label: "Attendance", icon: "list", roles: STAFF },
+  { to: "/class", label: "Class", icon: "class", module: "classes" },
+  { to: "/subject", label: "Subject", icon: "subject", module: "subjects" },
+  { to: "/routine", label: "Routine", icon: "calendar", module: "routine" },
+  { to: "/attendance", label: "Attendance", icon: "list", module: "attendance" },
   { label: "Exam", icon: "exam", children: [
-    { to: "/exam", label: "Exam Schedule", roles: EVERYONE },
-    { to: "/online-exams", label: "Online Exams", roles: EVERYONE },
+    { to: "/exam", label: "Exam Schedule", module: "exams" },
+    { to: "/online-exams", label: "Online Exams", module: "onlineExams" },
   ]},
-  { to: "/notice", label: "Notice", icon: "notice", roles: EVERYONE },
-  { to: "/transport", label: "Transport", icon: "bus", roles: ADMIN },
-  { to: "/hostel", label: "Hostel", icon: "building", roles: ADMIN },
+  { to: "/notice", label: "Notice", icon: "notice", module: "notices" },
+  { to: "/transport", label: "Transport", icon: "bus", module: "transport" },
+  { to: "/hostel", label: "Hostel", icon: "building", module: "hostel" },
 ];
+export const ALL_ROUTES = NAV.flatMap((n) => (n.children ? n.children : [n]));
+
+export const linkAllowed = (link, role, can) => (link.roles ? link.roles.includes(role) : can(link.module, link.need || "view"));
 
 /** Nav filtered to what the role may see (groups disappear when empty). */
-export function navFor(role) {
+function navFor(role, can) {
   return NAV.map((item) => {
-    if (!item.children) return item.roles.includes(role) ? item : null;
-    const children = item.children.filter((c) => c.roles.includes(role));
+    if (!item.children) return linkAllowed(item, role, can) ? item : null;
+    const children = item.children.filter((c) => linkAllowed(c, role, can));
     return children.length ? { ...item, children } : null;
   }).filter(Boolean);
 }
-export const ALL_ROUTES = NAV.flatMap((n) => n.children ? n.children.map((c) => ({ ...c, section: n.label })) : [n]);
 
 function NavGroup({ item, pathname }) {
   const containsActive = item.children.some((c) => c.to === pathname || (c.to !== "/" && pathname.startsWith(c.to + "/")));
@@ -85,24 +95,24 @@ function TopBar({ onMenu }) {
   const { user, logout } = useAuth();
   const { notices, students, teachers, resetData } = useData();
   const { toast, confirm } = useUI();
+  const can = usePermission();
   const navigate = useNavigate();
-  const isStaff = STAFF.includes(user.role);
   const [open, setOpen] = useState(null); // "bell" | "chat" | "user"
   const [seen, setSeen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useClickAway(() => setOpen(null));
   const toggle = (k) => { setOpen((o) => (o === k ? null : k)); if (k === "bell") setSeen(true); };
+  const isStaff = STAFF.includes(user.role);
 
   const onSearch = (e) => {
     e.preventDefault();
     const s = q.trim().toLowerCase();
     if (!s) return;
-    const page = ALL_ROUTES.find((r) => r.label.toLowerCase().includes(s) && r.roles.includes(user.role));
+    const page = ALL_ROUTES.find((r) => r.label.toLowerCase().includes(s) && linkAllowed(r, user.role, can));
     if (page) navigate(page.to);
-    else if (!isStaff) toast(`No page matches "${q.trim()}"`); // students can't browse other people's records
-    else if (teachers.some((t) => t.name.toLowerCase().includes(s))) navigate("/teachers", { state: { q } });
-    else if (students.some((t) => t.name.toLowerCase().includes(s) || t.roll.includes(s))) navigate("/students", { state: { q } });
-    else navigate("/students", { state: { q } });
+    else if (can("teachers") && teachers.some((t) => t.name.toLowerCase().includes(s))) navigate("/teachers", { state: { q } });
+    else if (can("students")) navigate("/students", { state: { q } });
+    else toast(`No page matches "${q.trim()}"`); // students/parents can't browse other people's records
     setQ("");
   };
 
@@ -114,51 +124,58 @@ function TopBar({ onMenu }) {
         <Icon name="search" />
       </form>
       <div className="top-actions" ref={ref}>
-        <div className="dropdown-wrap">
-          <button className="round-btn" onClick={() => toggle("bell")} aria-label="Notifications"><Icon name="bell" />{!seen && <span className="dot" />}</button>
-          {open === "bell" && (
-            <div className="dropdown">
-              <h4>Notifications</h4>
-              {notices.slice(0, 4).map((n) => {
-                const [tone, icon] = FEED_TONES[n.type] || FEED_TONES.event;
-                return (
-                  <button key={n.id} className="dd-item" onClick={() => { setOpen(null); navigate("/notice"); }}>
-                    <span className={`feed-icon ${tone}`} style={{ width: 36, height: 36 }}><Icon name={icon} /></span>
-                    <span><b>{n.title}</b><small>{relTime(n.date)}</small></span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {isStaff && <div className="dropdown-wrap">
-          <button className="round-btn" onClick={() => toggle("chat")} aria-label="Messages"><Icon name="chat" /></button>
-          {open === "chat" && (
-            <div className="dropdown">
-              <h4>Messages</h4>
-              {DATA.messages.map((m) => (
-                <div key={m.from} className="dd-item">
-                  <Avatar name={m.from} />
-                  <span><b>{m.from}</b><small>{m.text}</small></span>
-                  <small style={{ marginLeft: "auto", color: "var(--muted)" }}>{m.time}</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>}
+        {can("notices") && (
+          <div className="dropdown-wrap">
+            <button className="round-btn" onClick={() => toggle("bell")} aria-label="Notifications"><Icon name="bell" />{!seen && <span className="dot" />}</button>
+            {open === "bell" && (
+              <div className="dropdown">
+                <h4>Notifications</h4>
+                {notices.slice(0, 4).map((n) => {
+                  const [tone, icon] = FEED_TONES[n.type] || FEED_TONES.event;
+                  return (
+                    <button key={n.id} className="dd-item" onClick={() => { setOpen(null); navigate("/notice"); }}>
+                      <span className={`feed-icon ${tone}`} style={{ width: 36, height: 36 }}><Icon name={icon} /></span>
+                      <span><b>{n.title}</b><small>{relTime(n.date)}</small></span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {isStaff && (
+          <div className="dropdown-wrap">
+            <button className="round-btn" onClick={() => toggle("chat")} aria-label="Messages"><Icon name="chat" /></button>
+            {open === "chat" && (
+              <div className="dropdown">
+                <h4>Messages</h4>
+                {DATA.messages.map((m) => (
+                  <div key={m.from} className="dd-item">
+                    <Avatar name={m.from} />
+                    <span><b>{m.from}</b><small>{m.text}</small></span>
+                    <small style={{ marginLeft: "auto", color: "var(--muted)" }}>{m.time}</small>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="dropdown-wrap">
           <button className="profile" onClick={() => toggle("user")} aria-label="Account menu">
-            <Avatar name={user.name} color={{ admin: "#7b2cdf", teacher: "#ff7a3d", student: "#2fb36c" }[user.role]} />
-            <span className="who-text"><strong>{user.name}</strong><small>{user.role}</small></span>
+            <Avatar name={user.name} photo={user.photo} color={ROLE_COLOR[user.role]} />
+            <span className="who-text"><strong>{user.name}</strong><small>{ROLE_LABEL[user.role]}</small></span>
             <Icon name="chevron" />
           </button>
           {open === "user" && (
-            <div className="dropdown" style={{ minWidth: 220 }}>
+            <div className="dropdown" style={{ minWidth: 240 }}>
               <div className="dd-item" style={{ cursor: "default" }}><span><b>{user.name}</b><small>{user.email}</small></span></div>
-              {user.role === "admin" && (
+              <button className="dd-item" onClick={() => { setOpen(null); navigate("/my-account"); }}>
+                <Icon name="account" /><span>Account settings</span>
+              </button>
+              {ADMINS.includes(user.role) && (
                 <button className="dd-item" onClick={() => {
                   setOpen(null);
-                  confirm("Reset demo data?", "All changes saved in this browser (added students, edits, attendance, notices) will be replaced with the original sample data.",
+                  confirm("Reset demo data?", "All changes saved in this browser (accounts, school setup, students, attendance, exams…) will be replaced with the original sample data.",
                     () => { resetData(); toast("Demo data reset"); }, "Reset");
                 }}>
                   <Icon name="refresh" /><span>Reset demo data</span>
@@ -177,9 +194,11 @@ function TopBar({ onMenu }) {
 
 export default function Layout() {
   const { user } = useAuth();
+  const { school } = useData();
+  const can = usePermission();
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const items = navFor(user.role);
+  const items = navFor(user.role, can);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -191,7 +210,7 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link to={homeFor(user.role)} className="logo"><Logo />BrighterStep</Link>
+        <Link to={homeFor(user.role)} className="logo"><Logo /><span>BrighterStep<small>{school.name}</small></span></Link>
         <nav aria-label="Main">
           {items.map((item) =>
             item.children

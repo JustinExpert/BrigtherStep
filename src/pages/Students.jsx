@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { CLASSES, AVATAR_COLORS } from "../data.js";
@@ -29,7 +30,7 @@ export default function Students() {
   const navigate = useNavigate();
   return (
     <CrudPage
-      collection="students" title="Students List" singular="Student" crumbs={["Students"]}
+      collection="students" module="students" title="Students List" singular="Student" crumbs={["Students"]}
       fields={STUDENT_FIELDS} defaults={newStudentDefaults()}
       searchPlaceholder="Search by name or roll"
       filter={{ key: "class", label: "All classes", options: CLASSES }}
@@ -68,7 +69,7 @@ export function StudentDetails({ selfId }) {
   const params = useParams();
   const id = selfId || params.id;
   const { students, teachers, update } = useData();
-  const { user } = useAuth();
+  const can = usePermission();
   const { openModal, closeModal, toast } = useUI();
   const s = students.find((x) => x.id === id);
 
@@ -89,7 +90,7 @@ export function StudentDetails({ selfId }) {
   return (
     <>
       <PageHead title={selfId ? "My Profile" : "Student Details"} crumbs={selfId ? ["My Profile"] : [{ label: "Students", to: "/students" }, s.name]}>
-        {user.role === "admin" && <button className="btn" onClick={edit}>Edit student</button>}
+        {!selfId && can("students", "edit") && <button className="btn" onClick={edit}>Edit student</button>}
       </PageHead>
       <div className="grid-profile">
         <div className="card profile-card">

@@ -5,6 +5,7 @@ import { DATA } from "../data.js";
 import { fmtDate, todayIso } from "../lib/utils.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
+import { gradeFor } from "./SchoolSetup.jsx";
 
 const STATUS = { P: ["Present", "b-green"], A: ["Absent", "b-red"], L: ["Late", "b-amber"] };
 const FEE_CLASS = { Paid: "b-green", Pending: "b-amber", Overdue: "b-red" };
@@ -23,8 +24,14 @@ export const MissingRecord = () => (
 
 export default function StudentDashboard() {
   const me = useMyRecord();
-  const { exams, notices, attendance, teachers, onlineExams, submissions } = useData();
   if (!me) return <MissingRecord />;
+  return <StudentOverview me={me} />;
+}
+
+/** One student's overview. Used by the student themself and (with parentView) by their parent. */
+export function StudentOverview({ me, parentView = false }) {
+  const { exams, notices, attendance, teachers, onlineExams, submissions, school } = useData();
+  const grade = gradeFor(school, me.percent);
   const pendingOnline = onlineExams.filter((e) => e.class === me.class && e.status === "published"
     && !submissions.some((s) => s.examId === e.id && s.studentId === me.id && s.status === "submitted"));
 
@@ -41,13 +48,13 @@ export default function StudentDashboard() {
   return (
     <>
       <div className="card">
-        <h2 style={{ fontSize: 24 }}>Hello, {me.name.split(" ")[0]} 👋</h2>
+        <h2 style={{ fontSize: 24 }}>{parentView ? `${me.name}'s overview` : `Hello, ${me.name.split(" ")[0]} 👋`}</h2>
         <p style={{ color: "var(--muted)", margin: "6px 0 22px" }}>
           Class {me.class} · Roll {me.roll}{classTeacher && <> · Class teacher: <b>{classTeacher.name}</b></>}
         </p>
         <div className="stat-grid">
           <StatTile label="Attendance" value={me.attendance + "%"} icon="list" tone="purple" />
-          <StatTile label="Overall Score" value={me.percent + "%"} icon="exam" tone="blue" />
+          <StatTile label={`Overall Score · ${grade.remark || "Grade"}`} value={`${me.percent}% · ${grade.grade}`} icon="exam" tone="blue" />
           <StatTile label="Upcoming Exams" value={myExams.length} icon="calendar" tone="orange" />
           <StatTile label="Term Fees" value={me.fees} icon="money" tone="green" />
         </div>
@@ -55,8 +62,8 @@ export default function StudentDashboard() {
 
       {pendingOnline.length > 0 && (
         <div className="alert info banner">
-          <span>📝 You have <b>{pendingOnline.length}</b> online exam{pendingOnline.length > 1 ? "s" : ""} to take: {pendingOnline.map((e) => e.title).join(", ")}.</span>
-          <Link className="btn sm" to="/online-exams">Go to online exams</Link>
+          <span>📝 {parentView ? <>{me.name.split(" ")[0]} has</> : "You have"} <b>{pendingOnline.length}</b> online exam{pendingOnline.length > 1 ? "s" : ""} to take: {pendingOnline.map((e) => e.title).join(", ")}.</span>
+          {!parentView && <Link className="btn sm" to="/online-exams">Go to online exams</Link>}
         </div>
       )}
 
@@ -73,7 +80,7 @@ export default function StudentDashboard() {
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3>My Upcoming Exams</h3><Link className="link" to="/exam">All exams</Link></div>
+          <div className="card-head"><h3>Upcoming Exams</h3><Link className="link" to="/exam">All exams</Link></div>
           <div className="feed">
             {myExams.length ? myExams.slice(0, 5).map((e) => (
               <div className="feed-item" key={e.id}>
@@ -87,7 +94,7 @@ export default function StudentDashboard() {
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-head"><h3>My Attendance</h3><Link className="link" to="/profile">My profile</Link></div>
+          <div className="card-head"><h3>Attendance History</h3>{!parentView && <Link className="link" to="/profile">My profile</Link>}</div>
           {log.length ? (
             <div className="feed">
               {log.slice(0, 6).map((r) => (
@@ -97,7 +104,7 @@ export default function StudentDashboard() {
                 </div>
               ))}
             </div>
-          ) : <p className="empty">No attendance has been recorded yet. Your term average is {me.attendance}%.</p>}
+          ) : <p className="empty">No attendance has been recorded yet. The term average is {me.attendance}%.</p>}
           <div className="alert info" style={{ marginTop: 12 }}>
             Term fees: <Badge value={me.fees} cls={FEE_CLASS[me.fees]} /> {me.fees !== "Paid" && "Please contact the accounts office."}
           </div>

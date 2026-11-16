@@ -7,8 +7,9 @@ import { useData } from "../lib/DataContext.jsx";
 export default function Routine() {
   const { user } = useAuth();
   const { students } = useData();
-  // Students open on their own class timetable.
-  const myClass = user.role === "student" ? students.find((s) => s.id === user.studentId)?.class : null;
+  // Students open on their own class; parents on their (first) child's class.
+  const ownId = user.role === "student" ? user.studentId : user.role === "parent" ? user.childIds?.[0] : null;
+  const myClass = ownId ? students.find((s) => s.id === ownId)?.class : null;
   const [cls, setCls] = useState(myClass || CLASSES[0]);
   const grid = DATA.routine[cls];
   return (

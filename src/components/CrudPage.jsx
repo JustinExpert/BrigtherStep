@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { useAuth } from "../lib/AuthContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import DataTable from "./DataTable.jsx";
@@ -9,17 +9,17 @@ import { PageHead } from "./ui.jsx";
 
 /**
  * Generic list page with add / edit / delete for one collection.
- * editRoles: which roles may change records (others get read-only).
+ * module: permission-matrix key; roles with "edit" can change records, "view" gets read-only.
  */
 export default function CrudPage({
   collection, title, listTitle, singular, crumbs, fields, cols, filter, onView,
-  editRoles = ["admin"], defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id,
+  module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id,
 }) {
   const data = useData();
-  const { user } = useAuth();
+  const can = usePermission();
   const { openModal, closeModal, confirm, toast } = useUI();
   const location = useLocation();
-  const canEdit = editRoles.includes(user.role);
+  const canEdit = can(module, "edit");
   const rows = data[collection];
 
   const openForm = (row) =>

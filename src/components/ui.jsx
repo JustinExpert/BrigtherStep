@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { BADGE, initials } from "../lib/utils.js";
 import Icon from "./Icon.jsx";
 
-export const Avatar = ({ name, color = "#7b2cdf", size }) => (
-  <span className={`avatar ${size || ""}`} style={{ background: color }}>{initials(name)}</span>
-);
+export const Avatar = ({ name, color = "#7b2cdf", size, photo }) =>
+  photo
+    ? <img className={`avatar ${size || ""}`} src={photo} alt="" style={{ objectFit: "cover" }} />
+    : <span className={`avatar ${size || ""}`} style={{ background: color }}>{initials(name)}</span>;
 
 export const Badge = ({ value, cls }) => <span className={`badge ${cls || BADGE[value] || "b-purple"}`}>{value}</span>;
 

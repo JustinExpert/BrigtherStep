@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CLASSES } from "../data.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
 import { todayIso } from "../lib/utils.js";
 import { Avatar, PageHead, StatTile } from "../components/ui.jsx";
 
@@ -10,6 +11,7 @@ const OPTS = [["P", "Present"], ["A", "Absent"], ["L", "Late"]];
 export default function Attendance() {
   const { students, attendance, saveAttendance } = useData();
   const { toast } = useUI();
+  const canEdit = usePermission()("attendance", "edit");
   const [cls, setCls] = useState(CLASSES[0]);
   const [date, setDate] = useState(todayIso());
   const key = `${cls}|${date}`;
@@ -28,9 +30,11 @@ export default function Attendance() {
   return (
     <>
       <PageHead title="Attendance" crumbs={["Attendance"]}>
-        <button className="btn" onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for Class ${cls}`); }}>
-          {saved ? "Update attendance" : "Save attendance"}
-        </button>
+        {canEdit ? (
+          <button className="btn" onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for Class ${cls}`); }}>
+            {saved ? "Update attendance" : "Save attendance"}
+          </button>
+        ) : <span className="badge b-blue">View only</span>}
       </PageHead>
       <div className="stat-grid">
         <StatTile label="Students" value={list.length} icon="cap" tone="purple" />

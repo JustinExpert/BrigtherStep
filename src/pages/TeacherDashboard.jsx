@@ -9,7 +9,8 @@ import { NoticeFeed } from "./AdminDashboard.jsx";
 export default function TeacherDashboard() {
   const { user } = useAuth();
   const { students, exams, notices, teachers } = useData();
-  const me = teachers.find((t) => t.name === user.name) || teachers[0];
+  // Linked staff record; admins previewing this page see the first teacher.
+  const me = teachers.find((t) => t.id === user.teacherId) || teachers.find((t) => t.name === user.name) || teachers[0];
   if (!me) return <div className="card empty">No teacher records found.</div>;
   const myStudents = students.filter((s) => s.class === me.class);
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);

@@ -1,4 +1,5 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
+import { SEED_HASHES } from "./seedHashes.js";
 let seed = 11;
 const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -29,7 +30,7 @@ const students = Array.from({ length: 64 }, (_, i) => {
     dob: `${int(2010, 2017)}-${pad(int(1, 12))}-${pad(int(1, 28))}`,
     phone: `+123 ${int(5, 9)}98${pad(int(0, 9999), 4)}`,
     parent: `${pick([...MALE, ...FEMALE])} ${last}`,
-    email: `${first}.${last}`.toLowerCase() + "@student.brighterstep.test",
+    email: `${first}.${last}.${43100 + i}`.toLowerCase() + "@brighterstep.test", // ID keeps it unique
     marks,
     percent: Math.round((marks / 1200) * 100),
     attendance: int(78, 100),
@@ -182,10 +183,40 @@ for (const exam of onlineExams.filter((e) => e.status !== "draft")) {
 
 export const DATA = { students, teachers, notices, books, classes, subjects, exams, routes, rooms, routine, attendanceChart, messages, DAYS, PERIODS, onlineExams, submissions };
 
-// Demo accounts. In a real system, credentials are checked by a server, never stored in browser code.
-export const DEMO_USERS = [
-  { email: "admin@brighterstep.test", password: "admin123", name: "Maya Reyes", role: "admin" },
-  { email: "teacher@brighterstep.test", password: "teacher123", name: "Grace Okafor", role: "teacher" },
-  // Linked to the first sample student record by ID.
-  { email: "student@brighterstep.test", password: "student123", name: students[0].name, role: "student", studentId: students[0].id },
+// ---------- User accounts ----------
+// Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.
+const account = (id, email, name, role, extra = {}) => ({
+  id, email, name, role, status: "active", phone: "", idNumber: "", photo: null,
+  createdAt: "2026-08-01", lastLogin: null, ...SEED_HASHES[email], ...extra,
+});
+const users = [
+  account("USR-1", "superadmin@brighterstep.test", "Alex Navarro", "superadmin", { idNumber: "SA-0001", phone: "+123 7000001" }),
+  account("USR-2", "admin@brighterstep.test", "Maya Reyes", "admin", { idNumber: "ADM-0001", phone: "+123 7000002" }),
+  account("USR-3", "teacher@brighterstep.test", "Grace Okafor", "teacher", { idNumber: "TCH-201", teacherId: "TCH-201", phone: teachers[0].phone }),
+  account("USR-4", "student@brighterstep.test", students[0].name, "student", { idNumber: students[0].id, studentId: students[0].id, phone: students[0].phone }),
+  account("USR-5", "parent@brighterstep.test", students[0].parent, "parent", { idNumber: "PAR-0001", childIds: [students[0].id] }),
+  account("USR-6", "daniel.cruz@brighterstep.test", "Daniel Cruz", "teacher", { idNumber: "TCH-202", teacherId: "TCH-202" }),
+  account("USR-7", "lena.novak@brighterstep.test", "Lena Novak", "student", { status: "pending", createdAt: "2026-11-15", note: "Self-registered" }),
+  account("USR-8", "elena.rossi@brighterstep.test", "Elena Rossi", "teacher", { status: "inactive", idNumber: "TCH-205", teacherId: "TCH-205", note: "On leave" }),
+  account("USR-9", "tomas.reyes@brighterstep.test", "Tomas Reyes", "parent", { status: "pending", createdAt: "2026-11-16", childIds: [students[2].id], note: "Self-registered" }),
 ];
+
+const school = {
+  name: "Northfield Academy",
+  motto: "Every day, a brighter step.",
+  address: "120 Learning Lane, Northfield",
+  phone: "+123 555 0100",
+  email: "office@brighterstep.test",
+  website: "https://brighterstep.test",
+  academicYear: { label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
+  passingMark: 60,
+  grading: [
+    { grade: "A", min: 90, remark: "Outstanding" },
+    { grade: "B", min: 80, remark: "Very good" },
+    { grade: "C", min: 70, remark: "Good" },
+    { grade: "D", min: 60, remark: "Passed" },
+    { grade: "F", min: 0, remark: "Failed" },
+  ],
+};
+
+export const SEED = { users, school };

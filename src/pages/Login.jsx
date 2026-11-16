@@ -1,20 +1,64 @@
 import { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { homeFor, useAuth } from "../lib/AuthContext.jsx";
-import { DEMO_USERS } from "../data.js";
+import { useData } from "../lib/DataContext.jsx";
+import { ROLE_LABEL } from "../lib/permissions.js";
 import Icon, { Logo } from "../components/Icon.jsx";
+
+export const DEMO_ACCOUNTS = [
+  ["superadmin", "superadmin@brighterstep.test", "super123", "shield"],
+  ["admin", "admin@brighterstep.test", "admin123", "lock"],
+  ["teacher", "teacher@brighterstep.test", "teacher123", "teacher"],
+  ["student", "student@brighterstep.test", "student123", "cap"],
+  ["parent", "parent@brighterstep.test", "parent123", "parents"],
+];
+
+/** Shared two-column frame for login, register and password reset. */
+export function AuthShell({ children }) {
+  const { school, students, teachers, classes } = useData();
+  return (
+    <div className="login">
+      <section className="login-art">
+        <span className="blob" style={{ width: 420, height: 420, right: -140, top: -120 }} />
+        <span className="blob" style={{ width: 260, height: 260, left: -80, bottom: 60 }} />
+        <div className="logo"><Logo />BrighterStep</div>
+        <div style={{ position: "relative" }}>
+          <h1>{school.name}</h1>
+          <p>{school.motto} Students, teachers, parents, classes, attendance, exams and fees, all in one place.</p>
+        </div>
+        <div className="login-stats">
+          <div><b>{students.length}</b><span>Students</span></div>
+          <div><b>{teachers.length}</b><span>Teachers</span></div>
+          <div><b>{classes.length}</b><span>Classes</span></div>
+        </div>
+      </section>
+      <section className="login-form-wrap">{children}</section>
+    </div>
+  );
+}
+
+export const PasswordInput = ({ value, onChange, autoComplete = "current-password", placeholder = "••••••••", label = "Password" }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="pw-field">
+      <input className="input" type={show ? "text" : "password"} autoComplete={autoComplete} required maxLength={128}
+        value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ paddingRight: 46 }} aria-label={label} />
+      <button type="button" className="icon-btn" onClick={() => setShow((s) => !s)} aria-label={show ? "Hide password" : "Show password"}>
+        <Icon name={show ? "eyeOff" : "eye"} />
+      </button>
+    </div>
+  );
+};
 
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(location.state?.email || "");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [info, setInfo] = useState("");
 
   if (user) return <Navigate to={homeFor(user.role)} replace />;
 
@@ -25,7 +69,7 @@ export default function Login() {
     try {
       const u = await login(email, password, remember);
       const from = location.state?.from;
-      navigate(from && from !== "/login" ? from : homeFor(u.role), { replace: true });
+      navigate(from && !["/login", "/register", "/forgot-password"].includes(from) ? from : homeFor(u.role), { replace: true });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -33,63 +77,40 @@ export default function Login() {
   };
 
   return (
-    <div className="login">
-      <section className="login-art">
-        <span className="blob" style={{ width: 420, height: 420, right: -140, top: -120 }} />
-        <span className="blob" style={{ width: 260, height: 260, left: -80, bottom: 60 }} />
-        <div className="logo"><Logo />BrighterStep</div>
-        <div style={{ position: "relative" }}>
-          <h1>Manage your whole school from one place.</h1>
-          <p>Students, teachers, classes, attendance, exams and fees, all in one dashboard.</p>
+    <AuthShell>
+      <form className="login-form form" onSubmit={submit}>
+        <div>
+          <h2>Welcome back 👋</h2>
+          <p style={{ color: "var(--muted)", margin: "8px 0 14px" }}>Sign in to your account to continue.</p>
         </div>
-        <div className="login-stats">
-          <div><b>64</b><span>Students</span></div>
-          <div><b>12</b><span>Teachers</span></div>
-          <div><b>6</b><span>Classes</span></div>
+        {location.state?.notice && <div className="alert info">{location.state.notice}</div>}
+        {error && <div className="alert error" role="alert">{error}</div>}
+        <label>Email
+          <input className="input" type="email" autoComplete="username" required value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder="you@brighterstep.test" />
+        </label>
+        <label>Password<PasswordInput value={password} onChange={setPassword} /></label>
+        <div className="row-between">
+          <label><input type="checkbox" className="check" checked={remember} onChange={(e) => setRemember(e.target.checked)} />Remember me</label>
+          <Link className="link" to="/forgot-password" state={{ email }}>Forgot password?</Link>
         </div>
-      </section>
+        <button className="btn block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        <p style={{ textAlign: "center", margin: 0, fontSize: 13, color: "var(--muted)" }}>
+          New to {"BrighterStep"}? <Link className="link" to="/register">Create an account</Link>
+        </p>
 
-      <section className="login-form-wrap">
-        <form className="login-form form" onSubmit={submit} noValidate={false}>
-          <div>
-            <h2>Welcome back 👋</h2>
-            <p style={{ color: "var(--muted)", margin: "8px 0 14px" }}>Sign in to your account to continue.</p>
-          </div>
-          {error && <div className="alert error" role="alert">{error}</div>}
-          {info && <div className="alert info">{info}</div>}
-          <label>Email
-            <input className="input" type="email" autoComplete="username" required value={email}
-              onChange={(e) => setEmail(e.target.value)} placeholder="you@school.edu" />
-          </label>
-          <label>Password
-            <div className="pw-field">
-              <input className="input" type={show ? "text" : "password"} autoComplete="current-password" required
-                value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={{ paddingRight: 46 }} />
-              <button type="button" className="icon-btn" onClick={() => setShow((s) => !s)} aria-label={show ? "Hide password" : "Show password"}>
-                <Icon name={show ? "eyeOff" : "eye"} />
+        <div className="demo-accounts">
+          <p>Demo accounts (click to fill):</p>
+          <div className="btns">
+            {DEMO_ACCOUNTS.map(([role, mail, pw, icon]) => (
+              <button key={role} type="button" className="btn light sm" title={`${mail} / ${pw}`}
+                onClick={() => { setEmail(mail); setPassword(pw); setError(""); }}>
+                <Icon name={icon} />{ROLE_LABEL[role]}
               </button>
-            </div>
-          </label>
-          <div className="row-between">
-            <label><input type="checkbox" className="check" checked={remember} onChange={(e) => setRemember(e.target.checked)} />Remember me</label>
-            <button type="button" className="link" onClick={() => setInfo("Password reset needs a backend email service. In this demo, use a demo account below.")}>Forgot password?</button>
+            ))}
           </div>
-          <button className="btn block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-
-          <div className="demo-accounts">
-            <p>Demo accounts (click to fill):</p>
-            <div className="btns">
-              {DEMO_USERS.map((u) => (
-                <button key={u.email} type="button" className="btn light sm" style={{ flex: 1 }}
-                  onClick={() => { setEmail(u.email); setPassword(u.password); setError(""); }}>
-                  <Icon name={{ admin: "lock", teacher: "teacher", student: "cap" }[u.role]} />
-                  {u.role[0].toUpperCase() + u.role.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </form>
-      </section>
-    </div>
+        </div>
+      </form>
+    </AuthShell>
   );
 }

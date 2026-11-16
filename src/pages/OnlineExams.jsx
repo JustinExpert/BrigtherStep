@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { CLASSES, SUBJECTS } from "../data.js";
@@ -12,7 +13,10 @@ import { MissingRecord, useMyRecord } from "./StudentDashboard.jsx";
 
 export default function OnlineExams() {
   const { user } = useAuth();
-  return user.role === "student" ? <StudentExamList /> : <StaffExamList />;
+  const can = usePermission();
+  if (can("onlineExams", "edit")) return <StaffExamList />;
+  if (user.role === "student") return <StudentExamList />;
+  return <div className="card empty">Online exams are taken by students and managed by teachers.</div>;
 }
 
 /* ---------------- Staff: manage exams ---------------- */

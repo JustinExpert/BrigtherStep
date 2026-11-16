@@ -1,5 +1,6 @@
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
 import { CLASSES } from "../data.js";
 import DataTable from "../components/DataTable.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
@@ -10,13 +11,14 @@ const money = (n) => "$" + n.toLocaleString();
 export default function Fees() {
   const { students, update } = useData();
   const { toast, confirm } = useUI();
+  const canEdit = usePermission()("fees", "edit");
   const count = (s) => students.filter((x) => x.fees === s).length;
   const due = students.filter((s) => s.fees !== "Paid").length;
 
   return (
     <>
       <PageHead title="Fees Collection" crumbs={["Account", "Fees Collection"]}>
-        <button className="btn" disabled={!due} onClick={() => toast(`Reminders sent to ${due} guardians`)}>Send reminders ({due})</button>
+        {canEdit && <button className="btn" disabled={!due} onClick={() => toast(`Reminders sent to ${due} guardians`)}>Send reminders ({due})</button>}
       </PageHead>
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <StatTile label="Collected" value={money(count("Paid") * TERM_FEE)} icon="money" tone="green" />
@@ -36,6 +38,7 @@ export default function Fees() {
           { key: "fees", label: "Status", render: (r) => <Badge value={r.fees} /> },
           { key: "pay", label: "", sortable: false, render: (r) => r.fees === "Paid"
             ? <span style={{ color: "var(--muted)", fontSize: 13 }}>Received</span>
+            : !canEdit ? <span style={{ color: "var(--muted)", fontSize: 13 }}>Outstanding</span>
             : <button className="btn sm light" onClick={() => confirm("Record payment?", `Mark ${money(TERM_FEE)} from ${r.name} as paid.`, () => { update("students", r.id, { fees: "Paid" }); toast("Payment recorded"); }, "Mark paid")}>Mark paid</button> },
         ]}
       />

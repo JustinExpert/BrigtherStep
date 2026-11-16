@@ -12,7 +12,7 @@ export function Teachers() {
   const { openModal } = useUI();
   return (
     <CrudPage
-      collection="teachers" title="Teachers List" singular="Teacher" crumbs={["Teachers"]}
+      collection="teachers" module="teachers" title="Teachers List" singular="Teacher" crumbs={["Teachers"]}
       defaults={{ color: AVATAR_COLORS[1] }}
       searchPlaceholder="Search by name or subject"
       filter={{ key: "subject", label: "All subjects", options: SUBJECTS }}
@@ -47,7 +47,7 @@ export function Teachers() {
 export function Library() {
   return (
     <CrudPage
-      collection="books" title="Library" singular="Book" listTitle="All Books" describe={(r) => r.title}
+      collection="books" module="library" title="Library" singular="Book" listTitle="All Books" describe={(r) => r.title}
       searchPlaceholder="Search by title or author"
       filter={{ key: "subject", label: "All subjects", options: SUBJECTS }}
       fields={[
@@ -73,7 +73,7 @@ export function Classes() {
   const { students, teachers } = useData();
   return (
     <CrudPage
-      collection="classes" title="Class" singular="Class" listTitle="All Classes"
+      collection="classes" module="classes" title="Class" singular="Class" listTitle="All Classes"
       fields={[
         { key: "name", label: "Class name", required: true },
         { key: "section", label: "Section", type: "select", options: ["A", "B", "C"] },
@@ -99,7 +99,7 @@ export function Subjects() {
   const { teachers } = useData();
   return (
     <CrudPage
-      collection="subjects" title="Subject" singular="Subject" listTitle="All Subjects"
+      collection="subjects" module="subjects" title="Subject" singular="Subject" listTitle="All Subjects"
       fields={[
         { key: "name", label: "Subject name", required: true },
         { key: "code", label: "Code", required: true },
@@ -121,8 +121,8 @@ export function Subjects() {
 export function Exams() {
   return (
     <CrudPage
-      collection="exams" title="Exam Schedule" singular="Exam" listTitle="All Exams" crumbs={["Exam"]}
-      editRoles={["admin", "teacher"]} describe={(r) => `${r.name} – ${r.subject}`}
+      collection="exams" module="exams" title="Exam Schedule" singular="Exam" listTitle="All Exams" crumbs={["Exam"]}
+      describe={(r) => `${r.name} – ${r.subject}`}
       filter={{ key: "class", label: "All classes", options: CLASSES }}
       fields={[
         { key: "name", label: "Exam name", type: "select", options: ["Mid-term", "Unit test", "Final"] },
@@ -147,7 +147,7 @@ export function Exams() {
 export function Transport() {
   return (
     <CrudPage
-      collection="routes" title="Transport" singular="Route" listTitle="All Routes" describe={(r) => r.route}
+      collection="routes" module="transport" title="Transport" singular="Route" listTitle="All Routes" describe={(r) => r.route}
       fields={[
         { key: "route", label: "Route name", required: true },
         { key: "area", label: "Area", required: true },
@@ -173,7 +173,7 @@ export function Transport() {
 export function Hostel() {
   return (
     <CrudPage
-      collection="rooms" title="Hostel" singular="Room" listTitle="All Rooms" describe={(r) => `${r.hostel} ${r.room}`}
+      collection="rooms" module="hostel" title="Hostel" singular="Room" listTitle="All Rooms" describe={(r) => `${r.hostel} ${r.room}`}
       filter={{ key: "hostel", label: "All hostels", options: ["Oak House (Boys)", "Maple House (Girls)"] }}
       fields={[
         { key: "hostel", label: "Hostel", type: "select", options: ["Oak House (Boys)", "Maple House (Girls)"] },

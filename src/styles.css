@@ -379,3 +379,38 @@ button.choice:hover { border-color: var(--primary-100); background: var(--primar
   .exam-side { position: static; order: -1; }
   .palette { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
 }
+
+/* ---------- MVP1: accounts, setup, roles ---------- */
+.logo span { display: flex; flex-direction: column; line-height: 1.15; }
+.logo small { font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+.login-art .logo small { color: rgba(255,255,255,.75); }
+.demo-accounts .btns { flex-wrap: wrap; }
+.demo-accounts .btns .btn { flex: 1 1 30%; }
+.demo-mail { padding: 14px; border: 1px dashed var(--primary-100); border-radius: 12px; background: var(--primary-50); display: grid; gap: 8px; font-size: 13px; }
+.demo-mail p { margin: 0; color: #55535b; }
+.photo-picker { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+img.avatar { display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--primary-50); color: var(--primary-600); font-size: 13px; }
+.chip button { border: 0; background: none; font-size: 16px; line-height: 1; padding: 0 4px; color: inherit; }
+.form-grid.three { grid-template-columns: repeat(3, 1fr); }
+.plain-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+.plain-fieldset:disabled .input, .plain-fieldset:disabled .select { background: var(--bg); color: #55535b; }
+.input:disabled { background: var(--bg); color: #55535b; cursor: not-allowed; }
+.role-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.role-card { border-top: 4px solid var(--primary); padding: 18px; }
+.role-card h3 { font-size: 16px; margin-bottom: 6px; }
+.role-card p { margin: 0 0 10px; color: #55535b; font-size: 13px; line-height: 1.45; }
+.role-card small { color: var(--muted); }
+.perm-table th, .perm-table td { text-align: center; }
+.perm-table th:first-child, .perm-table td:first-child { text-align: left; }
+.perm-table .group-row td { background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; text-align: left; padding: 8px 12px; }
+.select.level { padding: 7px 10px; font-weight: 500; }
+.select.level.none { color: var(--red); }
+.select.level.view { color: var(--blue); }
+.select.level.edit { color: var(--green); }
+.child-tabs { align-self: flex-start; }
+.child-tabs button { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; }
+.child-tabs .avatar { width: 28px; height: 28px; font-size: 11px; }
+@media (max-width: 1280px) { .role-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px) { .role-grid, .form-grid.three { grid-template-columns: 1fr; } }

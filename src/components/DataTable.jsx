@@ -19,7 +19,7 @@ function pageList(cur, total) {
  */
 export default function DataTable({
   title, rows, cols, filter, actions = {}, onBulkDelete, selectable = !!onBulkDelete,
-  searchPlaceholder = "Search…", initialQuery = "", tools,
+  searchPlaceholder = "Search…", initialQuery = "", tools, searchKeys,
 }) {
   const [q, setQ] = useState(initialQuery);
   const [fv, setFv] = useState("");
@@ -30,14 +30,16 @@ export default function DataTable({
 
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
-    let out = s ? rows.filter((r) => cols.some((c) => String(r[c.key] ?? "").toLowerCase().includes(s))) : rows;
+    // Search only visible columns (plus explicit searchKeys), never hidden fields.
+    const keys = [...cols.map((c) => c.key), ...(searchKeys || [])];
+    let out = s ? rows.filter((r) => keys.some((k) => String(r[k] ?? "").toLowerCase().includes(s))) : rows;
     if (filter && fv) out = out.filter((r) => String(r[filter.key]) === fv);
     if (sort.key) out = [...out].sort((a, b) => {
       const x = a[sort.key], y = b[sort.key];
       return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * sort.dir;
     });
     return out;
-  }, [rows, cols, q, filter, fv, sort]);
+  }, [rows, cols, q, filter, fv, sort, searchKeys]);
 
   const pages = Math.max(1, Math.ceil(visible.length / per));
   const p = Math.min(page, pages - 1);

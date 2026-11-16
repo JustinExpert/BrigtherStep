@@ -1,0 +1,95 @@
+import { useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "../lib/AuthContext.jsx";
+import { passwordProblems } from "../lib/crypto.js";
+import { AuthShell, PasswordInput } from "./Login.jsx";
+
+export function ForgotPassword() {
+  const { requestReset } = useAuth();
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.email || "");
+  const [sent, setSent] = useState(false);
+  const [demoLink, setDemoLink] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const token = await requestReset(email);
+    setDemoLink(token ? `#/reset-password/${token}` : null);
+    setSent(true);
+    setBusy(false);
+  };
+
+  return (
+    <AuthShell>
+      <form className="login-form form" onSubmit={submit}>
+        <div>
+          <h2>Reset your password</h2>
+          <p style={{ color: "var(--muted)", margin: "8px 0 14px" }}>Enter your account email and we'll send you a reset link.</p>
+        </div>
+        {sent ? (
+          <>
+            {/* Same message whether or not the account exists, so emails can't be discovered. */}
+            <div className="alert info">If an active account exists for <b>{email}</b>, a reset link has been sent. It expires in 30 minutes.</div>
+            <div className="demo-mail">
+              <b>📬 Demo mailbox</b>
+              <p>This demo has no email server, so the message is shown here instead.</p>
+              {demoLink
+                ? <a className="btn block" href={demoLink}>Open reset link</a>
+                : <p style={{ margin: 0 }}><i>No email was sent (no active account with that address).</i></p>}
+            </div>
+          </>
+        ) : (
+          <>
+            <label>Email<input className="input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@brighterstep.test" /></label>
+            <button className="btn block" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
+          </>
+        )}
+        <p style={{ textAlign: "center", margin: 0, fontSize: 13 }}><Link className="link" to="/login">Back to sign in</Link></p>
+      </form>
+    </AuthShell>
+  );
+}
+
+export function ResetPassword() {
+  const { token } = useParams();
+  const { resetPassword } = useAuth();
+  const navigate = useNavigate();
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const problems = pw ? passwordProblems(pw) : [];
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (pw !== confirm) return setError("Passwords don't match.");
+    setBusy(true);
+    try {
+      const email = await resetPassword(token, pw);
+      navigate("/login", { replace: true, state: { email, notice: "Password updated. You can sign in with your new password." } });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthShell>
+      <form className="login-form form" onSubmit={submit}>
+        <div>
+          <h2>Choose a new password</h2>
+          <p style={{ color: "var(--muted)", margin: "8px 0 14px" }}>Use at least 8 characters with a letter and a number.</p>
+        </div>
+        {error && <div className="alert error" role="alert">{error} {error.includes("expired") && <Link className="link" to="/forgot-password">Request a new link</Link>}</div>}
+        <label>New password<PasswordInput value={pw} onChange={setPw} autoComplete="new-password" label="New password" /></label>
+        {pw && <small style={{ marginTop: -6, color: problems.length ? "var(--red)" : "var(--green)" }}>{problems.length ? `Needs ${problems.join(", ")}` : "✓ Strong enough"}</small>}
+        <label>Confirm new password<PasswordInput value={confirm} onChange={setConfirm} autoComplete="new-password" label="Confirm new password" /></label>
+        <button className="btn block" disabled={busy}>{busy ? "Saving…" : "Update password"}</button>
+        <p style={{ textAlign: "center", margin: 0, fontSize: 13 }}><Link className="link" to="/login">Back to sign in</Link></p>
+      </form>
+    </AuthShell>
+  );
+}

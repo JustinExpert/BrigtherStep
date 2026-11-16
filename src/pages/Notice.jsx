@@ -1,4 +1,6 @@
 import { useAuth } from "../lib/AuthContext.jsx";
+import { usePermission } from "../lib/usePermission.js";
+import { ADMINS } from "../lib/permissions.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { relTime, todayIso } from "../lib/utils.js";
@@ -11,6 +13,7 @@ const TYPES = ["event", "exam", "fees", "course", "teacher"];
 export default function Notice() {
   const { user } = useAuth();
   const { notices, add, remove } = useData();
+  const can = usePermission();
   const { openModal, closeModal, confirm, toast } = useUI();
 
   const create = () => openModal("Post Notice", (
@@ -28,12 +31,12 @@ export default function Notice() {
   return (
     <>
       <PageHead title="Notice Board" crumbs={["Notice"]}>
-        {user.role !== "student" && <button className="btn" onClick={create}><Icon name="plus" />Post Notice</button>}
+        {can("notices", "edit") && <button className="btn" onClick={create}><Icon name="plus" />Post Notice</button>}
       </PageHead>
       <div className="notice-grid">
         {notices.map((n) => {
           const [tone, icon] = FEED_TONES[n.type] || FEED_TONES.event;
-          const canDelete = user.role === "admin" || n.author === user.name;
+          const canDelete = can("notices", "edit") && (ADMINS.includes(user.role) || n.author === user.name);
           return (
             <article className="card notice-card" key={n.id}>
               <div className="who">
