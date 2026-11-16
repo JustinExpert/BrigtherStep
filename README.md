@@ -16,9 +16,12 @@ Demo accounts:
 | Admin   | admin@brighterstep.test   | admin123   |
 | Teacher | teacher@brighterstep.test | teacher123 |
 
-## Deploy (Azure Static Web Apps)
+## Deploy
 
-Build settings: **App location** `/`, **Output location** `dist`.
+**GitHub Pages (current):** every push to `main` builds and deploys via
+`.github/workflows/deploy.yml`. Live at https://justinexpert.github.io/BrigtherStep/
+
+**Azure Static Web Apps (alternative):** App location `/`, Output location `dist`.
 
 > The login is a front-end demo only: credentials live in the browser bundle and data
 > resets on refresh. Use a real backend (e.g. Supabase Auth or Azure SWA auth) before
