@@ -1,4 +1,4 @@
-// Sample data for the EduNest demo. All people and places are fictional.
+// Sample data for the BrighterStep demo. All people and places are fictional.
 let seed = 11;
 const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -29,7 +29,7 @@ const students = Array.from({ length: 64 }, (_, i) => {
     dob: `${int(2010, 2017)}-${pad(int(1, 12))}-${pad(int(1, 28))}`,
     phone: `+123 ${int(5, 9)}98${pad(int(0, 9999), 4)}`,
     parent: `${pick([...MALE, ...FEMALE])} ${last}`,
-    email: `${first}.${last}`.toLowerCase() + "@student.edunest.test",
+    email: `${first}.${last}`.toLowerCase() + "@student.brighterstep.test",
     marks,
     percent: Math.round((marks / 1200) * 100),
     attendance: int(78, 100),
@@ -49,7 +49,7 @@ const teachers = [
   name, gender, subject,
   class: CLASSES[i % CLASSES.length],
   phone: `+123 77${pad(int(0, 99999), 5)}`,
-  email: name.toLowerCase().replace(/[^a-z]+/g, ".") + "@edunest.test",
+  email: name.toLowerCase().replace(/[^a-z]+/g, ".") + "@brighterstep.test",
   joined: `${int(2015, 2025)}-${pad(int(1, 12))}-${pad(int(1, 28))}`,
   salary: int(32, 58) * 100,
   color: AVATAR_COLORS[i % AVATAR_COLORS.length],
@@ -124,6 +124,6 @@ export const DATA = { students, teachers, notices, books, classes, subjects, exa
 
 // Demo accounts. In a real system, credentials are checked by a server, never stored in browser code.
 export const DEMO_USERS = [
-  { email: "admin@edunest.test", password: "admin123", name: "Maya Reyes", role: "admin" },
-  { email: "teacher@edunest.test", password: "teacher123", name: "Grace Okafor", role: "teacher" },
+  { email: "admin@brighterstep.test", password: "admin123", name: "Maya Reyes", role: "admin" },
+  { email: "teacher@brighterstep.test", password: "teacher123", name: "Grace Okafor", role: "teacher" },
 ];

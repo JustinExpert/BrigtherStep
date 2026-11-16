@@ -7,7 +7,7 @@ import { DEMO_USERS } from "../data.js";
  * For real use, send credentials to a server (or Supabase/Firebase Auth), get back an
  * httpOnly session cookie, and enforce roles on the server for every request.
  */
-const KEY = "edunest.session";
+const KEY = "brighterstep.session";
 const MAX_ATTEMPTS = 5;
 const LOCK_MS = 30_000;
 

@@ -1,4 +1,4 @@
-# EduNest – School Management (demo)
+# BrighterStep – School Management (demo)
 
 A React + Vite school management dashboard with demo login (admin / teacher roles).
 
@@ -11,10 +11,10 @@ npm run dev
 
 Demo accounts:
 
-| Role    | Email                | Password   |
-|---------|----------------------|------------|
-| Admin   | admin@edunest.test   | admin123   |
-| Teacher | teacher@edunest.test | teacher123 |
+| Role    | Email                     | Password   |
+|---------|---------------------------|------------|
+| Admin   | admin@brighterstep.test   | admin123   |
+| Teacher | teacher@brighterstep.test | teacher123 |
 
 ## Deploy (Azure Static Web Apps)
 

@@ -37,7 +37,7 @@ export default function Login() {
       <section className="login-art">
         <span className="blob" style={{ width: 420, height: 420, right: -140, top: -120 }} />
         <span className="blob" style={{ width: 260, height: 260, left: -80, bottom: 60 }} />
-        <div className="logo"><Logo />EduNest</div>
+        <div className="logo"><Logo />BrighterStep</div>
         <div style={{ position: "relative" }}>
           <h1>Manage your whole school from one place.</h1>
           <p>Students, teachers, classes, attendance, exams and fees, all in one dashboard.</p>

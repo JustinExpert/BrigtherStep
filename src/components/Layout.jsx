@@ -166,13 +166,13 @@ export default function Layout() {
     setMenuOpen(false);
     window.scrollTo(0, 0);
     const r = ALL_ROUTES.find((x) => x.to === pathname);
-    document.title = `${r ? r.label : "Dashboard"} · EduNest`;
+    document.title = `${r ? r.label : "Dashboard"} · BrighterStep`;
   }, [pathname]);
 
   return (
     <div className="app">
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link to="/" className="logo"><Logo />EduNest</Link>
+        <Link to="/" className="logo"><Logo />BrighterStep</Link>
         <nav aria-label="Main">
           {items.map((item) =>
             item.children
