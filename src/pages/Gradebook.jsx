@@ -159,6 +159,21 @@ export default function Gradebook() {
 
   const groups = COMPONENTS.map((c) => ({ ...c, acts: acts.filter((a) => a.component === c.key), weight: Number(weights[c.key]) || 0 }));
 
+  // Most recent earlier quarter that has activities for this class + subject (to copy its setup).
+  const prev = TERMS.slice(0, TERMS.findIndex((t) => t.key === term)).reverse()
+    .map((t) => ({ term: t.key, acts: activities.filter((a) => a.class === current.class && a.subject === current.subject && a.term === t.key) }))
+    .find((x) => x.acts.length);
+  const copyFromPrev = () => {
+    const stamp = Date.now().toString(36).toUpperCase();
+    upsertMany("activities", [...prev.acts]
+      .sort((a, b) => ORDER[a.component] - ORDER[b.component] || a.date.localeCompare(b.date))
+      .map((a, i) => ({
+        id: `ACT-${stamp}-${i + 1}`, class: current.class, subject: current.subject, term,
+        component: a.component, title: a.title, maxScore: a.maxScore, date: todayIso(), scores: {}, createdBy: user.teacherId || user.id,
+      })));
+    toast(`Copied ${prev.acts.length} activities from ${termLabel(prev.term)} — now enter the scores`);
+  };
+
   return (
     <>
       <PageHead title="Gradebook" crumbs={["Grades", "Gradebook"]}>
@@ -166,7 +181,7 @@ export default function Gradebook() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {isPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}
             <button className="btn light" onClick={saveScores} disabled={!dirty}>Save scores</button>
-            <button className="btn" onClick={publish} disabled={status === "Published"}>{status === "Published" ? "Published ✓" : "Publish grades"}</button>
+            <button className="btn" onClick={publish} disabled={status === "Published" || !acts.length} title={acts.length ? undefined : "Add activities and scores first"}>{status === "Published" ? "Published ✓" : "Publish grades"}</button>
           </div>
         )}
       </PageHead>
@@ -210,6 +225,29 @@ export default function Gradebook() {
             {canEdit && <button className="btn sm" onClick={addActivity}><Icon name="plus" />Add activity</button>}
           </div>
         </div>
+        {!acts.length ? (
+          <div className="gb-empty">
+            <span className="feed-icon tone-purple"><Icon name="list" /></span>
+            <h3>No activities for {termLabel(term)} yet</h3>
+            <p>
+              Grades are computed from activities, so start by adding the quizzes, projects and exam for this quarter.
+              Then type each student's score and click <b>Publish grades</b>.
+            </p>
+            {canEdit ? (
+              <div className="gb-empty-actions">
+                {prev && (
+                  <button className="btn" onClick={copyFromPrev}>
+                    <Icon name="refresh" />Copy {prev.acts.length} activities from {termLabel(prev.term)}
+                  </button>
+                )}
+                <button className={`btn ${prev ? "light" : ""}`} onClick={addActivity}><Icon name="plus" />Add activity</button>
+              </div>
+            ) : <p className="hint">Only teachers and admins can add activities.</p>}
+            {prev && canEdit && (
+              <small className="hint">Copies {prev.acts.map((a) => a.title).join(", ")} with empty scores. You can rename, edit or delete them afterwards.</small>
+            )}
+          </div>
+        ) : (
         <div className="table-wrap">
           <table className="gb-table">
             <thead>
@@ -267,8 +305,6 @@ export default function Gradebook() {
             </tbody>
           </table>
         </div>
-        {!acts.length && (
-          <p className="empty">No activities for {termLabel(term)} yet.{canEdit && " Click “Add activity” to create a quiz, project or exam."}</p>
         )}
       </div>
     </>
