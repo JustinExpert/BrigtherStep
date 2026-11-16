@@ -19,6 +19,9 @@ import { Classes, Subjects, Teachers } from "./pages/Records.jsx";
 import Routine from "./pages/Routine.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import Notice from "./pages/Notice.jsx";
+import Assignments from "./pages/Assignments.jsx";
+import Gradebook from "./pages/Gradebook.jsx";
+import ReportCard from "./pages/ReportCard.jsx";
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
@@ -62,6 +65,7 @@ export default function App() {
         <Route element={<RequireRole roles={ADMINS} />}><Route index element={<AdminDashboard />} /></Route>
         <Route element={<RequireRole roles={STAFF} />}><Route path="/teacher" element={<TeacherDashboard />} /></Route>
         <Route element={<RequireRole roles={["parent"]} />}><Route path="/parent" element={<ParentDashboard />} /></Route>
+        <Route element={<RequireRole roles={["student", "parent"]} />}><Route path="/report-card" element={<ReportCard />} /></Route>
         <Route element={<RequireRole roles={["student"]} />}>
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/profile" element={<MyProfile />} />
@@ -78,7 +82,9 @@ export default function App() {
         {guard("classes", "view", "/class", <Classes />)}
         {guard("subjects", "view", "/subject", <Subjects />)}
         {guard("routine", "view", "/routine", <Routine />)}
+        {guard("assignments", "view", "/assignments", <Assignments />)}
         {guard("attendance", "view", "/attendance", <Attendance />)}
+        {guard("grades", "view", "/grades", <Gradebook />)}
         {guard("notices", "view", "/notice", <Notice />)}
 
         <Route path="*" element={<Navigate to="/" replace />} />

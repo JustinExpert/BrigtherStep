@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CLASSES } from "../data.js";
+import { useScope } from "../lib/scope.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
@@ -12,7 +12,8 @@ export default function Attendance() {
   const { students, attendance, saveAttendance } = useData();
   const { toast } = useUI();
   const canEdit = usePermission()("attendance", "edit");
-  const [cls, setCls] = useState(CLASSES[0]);
+  const scope = useScope(); // teachers only see the classes they teach
+  const [cls, setCls] = useState(scope.homeroom || scope.classes[0] || "");
   const [date, setDate] = useState(todayIso());
   const key = `${cls}|${date}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
@@ -26,6 +27,14 @@ export default function Attendance() {
 
   const count = (v) => list.filter((s) => marks[s.id] === v).length;
   const saved = !!attendance[key];
+  if (!scope.classes.length) {
+    return (
+      <>
+        <PageHead title="Attendance" crumbs={["Attendance"]} />
+        <div className="card empty">You don't have any classes assigned yet. Ask the school admin to set your teaching assignments.</div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -47,7 +56,7 @@ export default function Attendance() {
           <div><h3>Class {cls}</h3><p>{saved ? "Saved — you can still make changes." : "Not saved yet for this date."}</p></div>
           <div className="table-tools">
             <select className="select" value={cls} onChange={(e) => setCls(e.target.value)} aria-label="Class">
-              {CLASSES.map((c) => <option key={c} value={c}>Class {c}</option>)}
+              {scope.classes.map((c) => <option key={c} value={c}>Class {c}{c === scope.homeroom ? " (homeroom)" : ""}</option>)}
             </select>
             <input className="input" type="date" value={date} max={todayIso()} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Date" />
             <button className="btn sm light" onClick={() => setMarks(Object.fromEntries(list.map((s) => [s.id, "P"])))}>Mark all present</button>

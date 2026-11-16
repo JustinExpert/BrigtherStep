@@ -32,6 +32,11 @@ export const NAV = [
   ]},
   { label: "Teachers", icon: "teachers", children: [
     { to: "/teachers", label: "All Teachers", module: "teachers" },
+    { to: "/assignments", label: "Teaching Assignments", module: "assignments" },
+  ]},
+  { label: "Grades", icon: "exam", children: [
+    { to: "/grades", label: "Gradebook", module: "grades" },
+    { to: "/report-card", label: "Report Card", roles: ["student", "parent"] },
   ]},
   { to: "/class", label: "Class", icon: "class", module: "classes" },
   { to: "/subject", label: "Subject", icon: "subject", module: "subjects" },

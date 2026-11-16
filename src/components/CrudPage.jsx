@@ -13,14 +13,15 @@ import { PageHead } from "./ui.jsx";
  */
 export default function CrudPage({
   collection, title, listTitle, singular, crumbs, fields, cols, filter, onView,
-  module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id,
+  module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id, rowFilter, subtitle,
 }) {
   const data = useData();
   const can = usePermission();
   const { openModal, closeModal, confirm, toast } = useUI();
   const location = useLocation();
   const canEdit = can(module, "edit");
-  const rows = data[collection];
+  // rowFilter limits what this user may see (e.g. a teacher sees only their classes).
+  const rows = rowFilter ? data[collection].filter(rowFilter) : data[collection];
 
   const openForm = (row) =>
     openModal(row ? `Edit ${singular}` : `Add ${singular}`, (

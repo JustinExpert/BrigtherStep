@@ -5,8 +5,8 @@ import { DEFAULT_PERMISSIONS, MODULES, ROLES } from "./permissions.js";
 // Store with generic CRUD per collection, saved to this browser's localStorage so changes
 // survive a refresh. Each browser/device has its own copy — nothing is shared between users.
 // To use a real backend, replace these functions with API calls.
-const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users"];
-const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-" };
+const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades"];
+const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-" };
 const STORAGE_KEY = "brighterstep.data.v1";
 
 const SOURCE = { ...DATA, users: SEED.users };
@@ -61,6 +61,12 @@ export function DataProvider({ children }) {
       const set = new Set([].concat(ids));
       setDb((d) => ({ ...d, [col]: d[col].filter((x) => !set.has(x.id)) }));
     },
+    /** Insert or replace many records by id (used for grades and assignments). */
+    upsertMany: (col, items) => setDb((d) => {
+      const byId = new Map(d[col].map((x) => [x.id, x]));
+      items.forEach((it) => byId.set(it.id, { ...byId.get(it.id), ...it }));
+      return { ...d, [col]: [...byId.values()] };
+    }),
     saveAttendance: (key, marks) => setAttendance((a) => ({ ...a, [key]: marks })),
     saveSchool: (patch) => setSchool((s) => ({ ...s, ...patch })),
     setPermission: (module, role, level) => setPermissions((p) => ({ ...p, [module]: { ...p[module], [role]: level } })),

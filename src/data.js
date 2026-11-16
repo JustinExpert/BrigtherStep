@@ -79,7 +79,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const PERIODS = ["08:00", "08:50", "09:40", "10:50", "11:40", "12:30"];
 const routine = Object.fromEntries(CLASSES.map((c) => [c, DAYS.map(() => PERIODS.map(() => {
   const s = pick(SUBJECTS);
-  return { subject: s, teacher: (teachers.find((t) => t.subject === s) || teachers[0]).name };
+  return { subject: s }; // the teacher comes from the class/subject teaching assignment
 }))]));
 
 const attendanceChart = {
@@ -88,7 +88,39 @@ const attendanceChart = {
   teachers: [96, 97, 94, 98, 97, 93, 0, 91, 98, 97, 96, 0],
 };
 
-export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS };
+// ---------- Teaching assignments (who teaches which subject in which class) ----------
+// Subjects with two teachers are split: classes 01–03 get the first, 04–06 the second.
+const assignments = [];
+CLASSES.forEach((cls, ci) => {
+  [...new Set(routine[cls].flat().map((s) => s.subject))].forEach((subject) => {
+    const options = teachers.filter((t) => t.subject === subject);
+    const teacher = options[ci < 3 ? 0 : options.length - 1] || teachers[0];
+    assignments.push({ id: `ASG-${cls}-${subject.replace(/W+/g, "")}`, class: cls, subject, teacherId: teacher.id });
+  });
+});
+
+// ---------- Grades (score 0–100 per student, subject and quarter) ----------
+export const TERMS = [
+  { key: "Q1", label: "1st Quarter" }, { key: "Q2", label: "2nd Quarter" },
+  { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
+];
+// Q1 is published for everyone. Q2 is published too, except Mathematics in classes 01–03,
+// which is saved as a draft so the demo teacher has grades to review and publish.
+const grades = [];
+students.forEach((s) => {
+  assignments.filter((a) => a.class === s.class).forEach((a) => {
+    ["Q1", "Q2"].forEach((term) => {
+      const draft = term === "Q2" && a.subject === "Mathematics" && ["01", "02", "03"].includes(s.class);
+      grades.push({
+        id: `${s.id}|${a.subject}|${term}`, studentId: s.id, class: s.class, subject: a.subject, term,
+        score: Math.max(55, Math.min(100, s.percent + int(-12, 12))), published: !draft,
+        updatedBy: a.teacherId, updatedAt: term === "Q1" ? "2026-10-24" : "2026-11-14",
+      });
+    });
+  });
+});
+
+export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS, assignments, grades };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.

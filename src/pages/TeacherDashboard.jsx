@@ -2,80 +2,88 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { DATA } from "../data.js";
+import { teacherWeek, useScope } from "../lib/scope.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
-  const { students, notices, teachers } = useData();
-  // Linked staff record; admins previewing this page see the first teacher.
-  const me = teachers.find((t) => t.id === user.teacherId) || teachers.find((t) => t.name === user.name) || teachers[0];
-  if (!me) return <div className="card empty">No teacher records found.</div>;
-  const myStudents = students.filter((s) => s.class === me.class);
+  const { students, notices, teachers, grades, assignments } = useData();
+  const scope = useScope();
+  // Admins previewing this page see the first teacher's view.
+  const me = teachers.find((t) => t.id === user.teacherId) || (user.role !== "teacher" ? teachers[0] : null);
+  if (!me) return <div className="card empty">Your account isn't linked to a staff record yet. Please ask the school admin.</div>;
+
+  const mine = assignments.filter((a) => a.teacherId === me.id).sort((a, b) => a.class.localeCompare(b.class));
+  const classes = [...new Set([...mine.map((a) => a.class), me.class])].sort();
+  const myStudents = students.filter((s) => classes.includes(s.class));
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
-  const today = DATA.routine[me.class][dayIdx];
-  // Assigned classes & subjects, from the timetable: { class, subject, periods per week }.
-  const assigned = [];
-  Object.entries(DATA.routine).forEach(([cls, week]) => week.flat().forEach((slot) => {
-    if (slot.teacher !== me.name) return;
-    const row = assigned.find((a) => a.class === cls && a.subject === slot.subject);
-    row ? row.periods++ : assigned.push({ class: cls, subject: slot.subject, periods: 1 });
-  }));
-  assigned.sort((a, b) => a.class.localeCompare(b.class));
+  const today = teacherWeek(assignments, me.id)[dayIdx];
+  const periodsOf = (a) => DATA.routine[a.class].flat().filter((s) => s.subject === a.subject).length;
+  const drafts = grades.filter((g) => !g.published && mine.some((a) => a.class === g.class && a.subject === g.subject)).length;
+  const attention = myStudents.filter((s) => s.attendance < 88);
 
   return (
     <>
       <div className="card">
         <h2 style={{ fontSize: 24 }}>Teacher Dashboard</h2>
         <p style={{ color: "var(--muted)", margin: "6px 0 22px" }}>
-          Hello {user.name.split(" ")[0]}. You teach <b>{me.subject}</b> and are class teacher of <b>Class {me.class}</b>.
+          Hello {me.name.split(" ")[0]}. You teach <b>{[...new Set(mine.map((a) => a.subject))].join(", ") || "no subjects yet"}</b>
+          {" "}and are class teacher of <b>Class {me.class}</b>.{!scope.all && " You only see the students in your classes."}
         </p>
         <div className="stat-grid">
           <StatTile label="My Students" value={myStudents.length} icon="cap" tone="purple" />
-          <StatTile label="Classes Today" value={today.length} icon="calendar" tone="blue" />
-          <StatTile label="Classes Assigned" value={new Set(assigned.map((a) => a.class)).size} icon="class" tone="orange" />
-          <StatTile label="Avg. Attendance" value={Math.round(myStudents.reduce((a, s) => a + s.attendance, 0) / (myStudents.length || 1)) + "%"} icon="list" tone="green" />
+          <StatTile label="Classes Assigned" value={classes.length} icon="class" tone="orange" />
+          <StatTile label="Periods Today" value={today.filter(Boolean).length} icon="calendar" tone="blue" />
+          <StatTile label="Grades to publish" value={drafts} icon="exam" tone="green" />
         </div>
       </div>
 
+      {drafts > 0 && (
+        <div className="alert info banner">
+          <span>📝 You have <b>{drafts}</b> draft grade{drafts > 1 ? "s" : ""} that students can't see yet.</span>
+          <Link className="btn sm" to="/grades">Open gradebook</Link>
+        </div>
+      )}
+
       <div className="grid-main">
         <div className="card">
-          <div className="card-head"><h3>Today's Timetable · Class {me.class}</h3><Link className="link" to="/routine">Full timetable</Link></div>
+          <div className="card-head"><h3>My Timetable Today</h3><Link className="link" to="/routine">Full timetable</Link></div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th className="no-sort">Time</th><th className="no-sort">Subject</th><th className="no-sort">Teacher</th></tr></thead>
+              <thead><tr><th className="no-sort">Time</th><th className="no-sort">Class</th><th className="no-sort">Subject</th></tr></thead>
               <tbody>
                 {today.map((s, i) => (
-                  <tr key={i}><td>{DATA.PERIODS[i]}</td><td><b>{s.subject}</b></td><td>{s.teacher}</td></tr>
+                  <tr key={i}><td>{DATA.PERIODS[i]}</td><td>{s ? <b>Class {s.class}</b> : <span className="muted">Free</span>}</td><td>{s?.subject || "—"}</td></tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3>Assigned Classes &amp; Subjects</h3><Link className="link" to="/students" state={{ q: "" }}>Class lists</Link></div>
+          <div className="card-head"><h3>Assigned Classes &amp; Subjects</h3><Link className="link" to="/students">Class lists</Link></div>
           <div className="feed">
-            {assigned.length ? assigned.map((a) => (
-              <div className="feed-item" key={a.class + a.subject}>
-                <div><h5>Class {a.class} · {a.subject}</h5><p>{a.periods} period{a.periods > 1 ? "s" : ""} a week{a.class === me.class && " · class teacher"}</p></div>
+            {mine.length ? mine.map((a) => (
+              <div className="feed-item" key={a.id}>
+                <div><h5>Class {a.class} · {a.subject}</h5><p>{periodsOf(a)} period{periodsOf(a) > 1 ? "s" : ""} a week{a.class === me.class && " · class teacher"}</p></div>
                 <time>{students.filter((s) => s.class === a.class).length} students</time>
               </div>
-            )) : <p className="empty">No classes on the timetable yet.</p>}
+            )) : <p className="empty">No teaching assignments yet.</p>}
           </div>
         </div>
       </div>
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-head"><h3>Class {me.class} students needing attention</h3><Link className="link" to="/attendance">Take attendance</Link></div>
+          <div className="card-head"><h3>Students with low attendance</h3><Link className="link" to="/attendance">Take attendance</Link></div>
           <div className="feed">
-            {myStudents.filter((s) => s.attendance < 88 || s.percent < 70).slice(0, 5).map((s) => (
+            {attention.slice(0, 6).map((s) => (
               <div className="feed-item" key={s.id}>
-                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Attendance {s.attendance}% · Score {s.percent}%</p></div>
-                <time><Badge value={s.attendance < 88 ? "Low attendance" : "Low score"} cls={s.attendance < 88 ? "b-red" : "b-amber"} /></time>
+                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Class {s.class} · attendance {s.attendance}%</p></div>
+                <time><Badge value="Below 88%" cls="b-red" /></time>
               </div>
             ))}
-            {!myStudents.some((s) => s.attendance < 88 || s.percent < 70) && <p className="empty">Everyone is on track 🎉</p>}
+            {!attention.length && <p className="empty">Everyone is on track 🎉</p>}
           </div>
         </div>
         <div className="card">

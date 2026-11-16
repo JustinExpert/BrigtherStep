@@ -8,6 +8,8 @@ import { fmtDate } from "../lib/utils.js";
 import CrudPage from "../components/CrudPage.jsx";
 import RecordForm from "../components/RecordForm.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
+import { buildReport, useScope } from "../lib/scope.js";
+import { ReportCardView } from "./ReportCard.jsx";
 
 export const STUDENT_FIELDS = [
   { key: "name", label: "Full name", required: true },
@@ -28,12 +30,15 @@ const newStudentDefaults = () => ({
 
 export default function Students() {
   const navigate = useNavigate();
+  const scope = useScope();
   return (
     <CrudPage
-      collection="students" module="students" title="Students List" singular="Student" crumbs={["Students"]}
+      collection="students" module="students" title={scope.all ? "Students List" : "My Students"} singular="Student" crumbs={["Students"]}
+      listTitle={scope.all ? undefined : `Classes you teach: ${scope.classes.map((c) => "Class " + c).join(", ") || "none yet"}`}
+      rowFilter={scope.all ? undefined : (s) => scope.inScope(s.class)}
       fields={STUDENT_FIELDS} defaults={newStudentDefaults()}
       searchPlaceholder="Search by name or roll"
-      filter={{ key: "class", label: "All classes", options: CLASSES }}
+      filter={{ key: "class", label: "All classes", options: scope.classes }}
       onView={(r) => navigate(`/students/${r.id}`)}
       cols={[
         { key: "name", label: "Students Name", render: (r) => <div className="who"><Avatar name={r.name} color={r.color} />{r.name}</div> },
@@ -71,7 +76,13 @@ export function StudentDetails({ selfId }) {
   const { students, teachers, update } = useData();
   const can = usePermission();
   const { openModal, closeModal, toast } = useUI();
+  const scope = useScope();
+  const data = useData();
   const s = students.find((x) => x.id === id);
+  // Teachers may only open students in the classes they teach.
+  if (s && !selfId && !scope.inScope(s.class)) {
+    return <div className="card empty">This student isn't in any of the classes you teach. <Link className="link" to="/students">Back to my students</Link></div>;
+  }
 
   if (!s) {
     return (
@@ -82,6 +93,7 @@ export function StudentDetails({ selfId }) {
     );
   }
   const classTeacher = teachers.find((t) => t.class === s.class);
+  const { average } = buildReport(s, data);
   const edit = () => openModal("Edit Student", (
     <RecordForm fields={STUDENT_FIELDS} initial={s} submitLabel="Save changes" onCancel={closeModal}
       onSubmit={(v) => { update("students", s.id, v); closeModal(); toast("Student updated"); }} />
@@ -100,7 +112,7 @@ export function StudentDetails({ selfId }) {
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
             <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{s.attendance}%</b></div></div>
-            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>Score</span><b style={{ fontSize: 22 }}>{s.percent}%</b></div></div>
+            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>General avg.</span><b style={{ fontSize: 22 }}>{average ?? "—"}</b></div></div>
           </div>
         </div>
         <div className="card">
@@ -113,10 +125,10 @@ export function StudentDetails({ selfId }) {
             <dt>Email</dt><dd>{s.email || "—"}</dd>
             <dt>Address</dt><dd>{s.address}</dd>
             <dt>Class teacher</dt><dd>{classTeacher ? classTeacher.name : "—"}</dd>
-            <dt>Total marks</dt><dd>{s.marks} / 1200</dd>
           </dl>
         </div>
       </div>
+      <ReportCardView student={s} />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { fmtDate } from "../lib/utils.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
+import { buildReport, teacherFor } from "../lib/scope.js";
 
 const STATUS = { P: ["Present", "b-green"], A: ["Absent", "b-red"], L: ["Late", "b-amber"] };
 
@@ -21,11 +22,10 @@ export const MissingRecord = () => (
   </div>
 );
 
-/** Subjects a class takes (from its timetable) with the teacher for each. */
-export function classSubjects(cls) {
-  const seen = new Map();
-  (DATA.routine[cls] || []).flat().forEach((s) => !seen.has(s.subject) && seen.set(s.subject, s.teacher));
-  return [...seen].map(([subject, teacher]) => ({ subject, teacher }));
+/** Subjects a class takes (from its timetable) with the assigned teacher for each. */
+export function classSubjects(cls, assignments, teachers) {
+  return [...new Set((DATA.routine[cls] || []).flat().map((s) => s.subject))]
+    .map((subject) => ({ subject, teacher: teacherFor(assignments, teachers, cls, subject) }));
 }
 
 /** Attendance marks saved by teachers for one student, newest first. */
@@ -44,11 +44,13 @@ export default function StudentDashboard() {
 
 /** One student's overview. Used by the student themself and (with parentView) by their parent. */
 export function StudentOverview({ me, parentView = false }) {
-  const { notices, attendance, teachers, classes, school } = useData();
-  const grade = gradeFor(school, me.percent);
+  const data = useData();
+  const { notices, attendance, teachers, classes, school, assignments } = data;
+  const { average } = buildReport(me, data); // general average of published grades
+  const grade = average === null ? null : gradeFor(school, average);
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
   const today = DATA.routine[me.class]?.[dayIdx] || [];
-  const subjects = classSubjects(me.class);
+  const subjects = classSubjects(me.class, assignments, teachers);
   const classTeacher = teachers.find((t) => t.class === me.class);
   const section = classes.find((c) => c.name === "Class " + me.class)?.section;
   const log = attendanceLog(attendance, me);
@@ -63,7 +65,7 @@ export function StudentOverview({ me, parentView = false }) {
         </p>
         <div className="stat-grid">
           <StatTile label="Attendance (term)" value={me.attendance + "%"} icon="list" tone="purple" />
-          <StatTile label={`Overall Score · ${grade.remark || "Grade"}`} value={`${me.percent}% · ${grade.grade}`} icon="exam" tone="blue" />
+          <StatTile label={grade ? `General Average · ${grade.remark}` : "General Average"} value={grade ? `${average} · ${grade.grade}` : "—"} icon="exam" tone="blue" />
           <StatTile label="Subjects" value={subjects.length} icon="subject" tone="orange" />
           <StatTile label="Classes today" value={today.length} icon="calendar" tone="green" />
         </div>
@@ -76,13 +78,13 @@ export function StudentOverview({ me, parentView = false }) {
             <table>
               <thead><tr><th className="no-sort">Time</th><th className="no-sort">Subject</th><th className="no-sort">Teacher</th></tr></thead>
               <tbody>
-                {today.map((s, i) => <tr key={i}><td>{DATA.PERIODS[i]}</td><td><b>{s.subject}</b></td><td>{s.teacher}</td></tr>)}
+                {today.map((s, i) => <tr key={i}><td>{DATA.PERIODS[i]}</td><td><b>{s.subject}</b></td><td>{teacherFor(assignments, teachers, me.class, s.subject)}</td></tr>)}
               </tbody>
             </table>
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3>Subjects &amp; Enrolled Class</h3><Link className="link" to="/subject">All subjects</Link></div>
+          <div className="card-head"><h3>Subjects &amp; Enrolled Class</h3><Link className="link" to="/report-card">Report card</Link></div>
           <div className="feed">
             {subjects.map((s) => (
               <div className="feed-item" key={s.subject}>
