@@ -126,4 +126,6 @@ export const DATA = { students, teachers, notices, books, classes, subjects, exa
 export const DEMO_USERS = [
   { email: "admin@brighterstep.test", password: "admin123", name: "Maya Reyes", role: "admin" },
   { email: "teacher@brighterstep.test", password: "teacher123", name: "Grace Okafor", role: "teacher" },
+  // Linked to the first sample student record by ID.
+  { email: "student@brighterstep.test", password: "student123", name: students[0].name, role: "student", studentId: students[0].id },
 ];

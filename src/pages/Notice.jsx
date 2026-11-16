@@ -28,7 +28,7 @@ export default function Notice() {
   return (
     <>
       <PageHead title="Notice Board" crumbs={["Notice"]}>
-        <button className="btn" onClick={create}><Icon name="plus" />Post Notice</button>
+        {user.role !== "student" && <button className="btn" onClick={create}><Icon name="plus" />Post Notice</button>}
       </PageHead>
       <div className="notice-grid">
         {notices.map((n) => {

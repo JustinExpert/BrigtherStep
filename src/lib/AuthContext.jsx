@@ -52,7 +52,7 @@ export function AuthProvider({ children }) {
       }
       throw new Error("Incorrect email or password.");
     }
-    const session = { name: match.name, email: match.email, role: match.role };
+    const session = { name: match.name, email: match.email, role: match.role, ...(match.studentId && { studentId: match.studentId }) };
     setAttempts(0);
     setUser(session);
     writeSession(session, remember);
@@ -69,4 +69,4 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
-export const homeFor = (role) => (role === "teacher" ? "/teacher" : "/");
+export const homeFor = (role) => ({ teacher: "/teacher", student: "/student" }[role] || "/");

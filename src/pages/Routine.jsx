@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { CLASSES, DATA } from "../data.js";
 import { PageHead } from "../components/ui.jsx";
+import { useAuth } from "../lib/AuthContext.jsx";
+import { useData } from "../lib/DataContext.jsx";
 
 export default function Routine() {
-  const [cls, setCls] = useState(CLASSES[0]);
+  const { user } = useAuth();
+  const { students } = useData();
+  // Students open on their own class timetable.
+  const myClass = user.role === "student" ? students.find((s) => s.id === user.studentId)?.class : null;
+  const [cls, setCls] = useState(myClass || CLASSES[0]);
   const grid = DATA.routine[cls];
   return (
     <>

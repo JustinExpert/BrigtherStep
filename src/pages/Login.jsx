@@ -82,7 +82,8 @@ export default function Login() {
               {DEMO_USERS.map((u) => (
                 <button key={u.email} type="button" className="btn light sm" style={{ flex: 1 }}
                   onClick={() => { setEmail(u.email); setPassword(u.password); setError(""); }}>
-                  <Icon name={u.role === "admin" ? "lock" : "teacher"} />{u.role === "admin" ? "Admin" : "Teacher"}
+                  <Icon name={{ admin: "lock", teacher: "teacher", student: "cap" }[u.role]} />
+                  {u.role[0].toUpperCase() + u.role.slice(1)}
                 </button>
               ))}
             </div>

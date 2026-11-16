@@ -2,36 +2,40 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Icon, { Logo } from "./Icon.jsx";
 import { Avatar, FEED_TONES } from "./ui.jsx";
-import { useAuth } from "../lib/AuthContext.jsx";
+import { homeFor, useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
+import { useUI } from "../lib/UIContext.jsx";
 import { DATA } from "../data.js";
 import { relTime } from "../lib/utils.js";
 
-const ALL = ["admin", "teacher"];
 const ADMIN = ["admin"];
+export const STAFF = ["admin", "teacher"];
+const EVERYONE = ["admin", "teacher", "student"];
 
 export const NAV = [
   { label: "Home", icon: "home", children: [
     { to: "/", label: "Admin", roles: ADMIN },
-    { to: "/teacher", label: "Teacher", roles: ALL },
+    { to: "/teacher", label: "Teacher", roles: STAFF },
+    { to: "/student", label: "My Dashboard", roles: ["student"] },
+    { to: "/profile", label: "My Profile", roles: ["student"] },
   ]},
   { label: "Students", icon: "cap", children: [
-    { to: "/students", label: "All Students", roles: ALL },
+    { to: "/students", label: "All Students", roles: STAFF },
     { to: "/students/new", label: "Admission Form", roles: ADMIN },
   ]},
   { label: "Teachers", icon: "teachers", children: [
-    { to: "/teachers", label: "All Teachers", roles: ALL },
+    { to: "/teachers", label: "All Teachers", roles: STAFF },
   ]},
-  { to: "/library", label: "Library", icon: "book", roles: ALL },
+  { to: "/library", label: "Library", icon: "book", roles: EVERYONE },
   { label: "Account", icon: "account", roles: ADMIN, children: [
     { to: "/account/fees", label: "Fees Collection", roles: ADMIN },
   ]},
-  { to: "/class", label: "Class", icon: "class", roles: ALL },
-  { to: "/subject", label: "Subject", icon: "subject", roles: ALL },
-  { to: "/routine", label: "Routine", icon: "calendar", roles: ALL },
-  { to: "/attendance", label: "Attendance", icon: "list", roles: ALL },
-  { to: "/exam", label: "Exam", icon: "exam", roles: ALL },
-  { to: "/notice", label: "Notice", icon: "notice", roles: ALL },
+  { to: "/class", label: "Class", icon: "class", roles: STAFF },
+  { to: "/subject", label: "Subject", icon: "subject", roles: EVERYONE },
+  { to: "/routine", label: "Routine", icon: "calendar", roles: EVERYONE },
+  { to: "/attendance", label: "Attendance", icon: "list", roles: STAFF },
+  { to: "/exam", label: "Exam", icon: "exam", roles: EVERYONE },
+  { to: "/notice", label: "Notice", icon: "notice", roles: EVERYONE },
   { to: "/transport", label: "Transport", icon: "bus", roles: ADMIN },
   { to: "/hostel", label: "Hostel", icon: "building", roles: ADMIN },
 ];
@@ -76,8 +80,10 @@ function useClickAway(onAway) {
 
 function TopBar({ onMenu }) {
   const { user, logout } = useAuth();
-  const { notices, students, teachers } = useData();
+  const { notices, students, teachers, resetData } = useData();
+  const { toast, confirm } = useUI();
   const navigate = useNavigate();
+  const isStaff = STAFF.includes(user.role);
   const [open, setOpen] = useState(null); // "bell" | "chat" | "user"
   const [seen, setSeen] = useState(false);
   const [q, setQ] = useState("");
@@ -90,6 +96,7 @@ function TopBar({ onMenu }) {
     if (!s) return;
     const page = ALL_ROUTES.find((r) => r.label.toLowerCase().includes(s) && r.roles.includes(user.role));
     if (page) navigate(page.to);
+    else if (!isStaff) toast(`No page matches "${q.trim()}"`); // students can't browse other people's records
     else if (teachers.some((t) => t.name.toLowerCase().includes(s))) navigate("/teachers", { state: { q } });
     else if (students.some((t) => t.name.toLowerCase().includes(s) || t.roll.includes(s))) navigate("/students", { state: { q } });
     else navigate("/students", { state: { q } });
@@ -121,7 +128,7 @@ function TopBar({ onMenu }) {
             </div>
           )}
         </div>
-        <div className="dropdown-wrap">
+        {isStaff && <div className="dropdown-wrap">
           <button className="round-btn" onClick={() => toggle("chat")} aria-label="Messages"><Icon name="chat" /></button>
           {open === "chat" && (
             <div className="dropdown">
@@ -135,16 +142,25 @@ function TopBar({ onMenu }) {
               ))}
             </div>
           )}
-        </div>
+        </div>}
         <div className="dropdown-wrap">
           <button className="profile" onClick={() => toggle("user")} aria-label="Account menu">
-            <Avatar name={user.name} color={user.role === "admin" ? "#7b2cdf" : "#ff7a3d"} />
+            <Avatar name={user.name} color={{ admin: "#7b2cdf", teacher: "#ff7a3d", student: "#2fb36c" }[user.role]} />
             <span className="who-text"><strong>{user.name}</strong><small>{user.role}</small></span>
             <Icon name="chevron" />
           </button>
           {open === "user" && (
             <div className="dropdown" style={{ minWidth: 220 }}>
               <div className="dd-item" style={{ cursor: "default" }}><span><b>{user.name}</b><small>{user.email}</small></span></div>
+              {user.role === "admin" && (
+                <button className="dd-item" onClick={() => {
+                  setOpen(null);
+                  confirm("Reset demo data?", "All changes saved in this browser (added students, edits, attendance, notices) will be replaced with the original sample data.",
+                    () => { resetData(); toast("Demo data reset"); }, "Reset");
+                }}>
+                  <Icon name="refresh" /><span>Reset demo data</span>
+                </button>
+              )}
               <button className="dd-item" onClick={() => { logout(); navigate("/login", { replace: true }); }}>
                 <Icon name="logout" /><span>Sign out</span>
               </button>
@@ -172,7 +188,7 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
-        <Link to="/" className="logo"><Logo />BrighterStep</Link>
+        <Link to={homeFor(user.role)} className="logo"><Logo />BrighterStep</Link>
         <nav aria-label="Main">
           {items.map((item) =>
             item.children

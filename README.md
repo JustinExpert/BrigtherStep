@@ -15,6 +15,10 @@ Demo accounts:
 |---------|---------------------------|------------|
 | Admin   | admin@brighterstep.test   | admin123   |
 | Teacher | teacher@brighterstep.test | teacher123 |
+| Student | student@brighterstep.test | student123 |
+
+Changes (added students, attendance, notices…) are saved in your browser's localStorage.
+Admins can restore the sample data from the profile menu → **Reset demo data**.
 
 ## Deploy
 

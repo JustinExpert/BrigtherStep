@@ -63,8 +63,10 @@ export function AdmissionForm() {
   );
 }
 
-export function StudentDetails() {
-  const { id } = useParams();
+/** Staff view any student by URL id; a student sees only their own record via /profile. */
+export function StudentDetails({ selfId }) {
+  const params = useParams();
+  const id = selfId || params.id;
   const { students, teachers, update } = useData();
   const { user } = useAuth();
   const { openModal, closeModal, toast } = useUI();
@@ -73,7 +75,8 @@ export function StudentDetails() {
   if (!s) {
     return (
       <div className="card empty">
-        Student not found. <Link className="link" to="/students">Back to list</Link>
+        Student not found.{" "}
+        {selfId ? "Your record may have been removed. Please contact the school office." : <Link className="link" to="/students">Back to list</Link>}
       </div>
     );
   }
@@ -85,7 +88,7 @@ export function StudentDetails() {
 
   return (
     <>
-      <PageHead title="Student Details" crumbs={[{ label: "Students", to: "/students" }, s.name]}>
+      <PageHead title={selfId ? "My Profile" : "Student Details"} crumbs={selfId ? ["My Profile"] : [{ label: "Students", to: "/students" }, s.name]}>
         {user.role === "admin" && <button className="btn" onClick={edit}>Edit student</button>}
       </PageHead>
       <div className="grid-profile">
