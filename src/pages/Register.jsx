@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { homeFor, useAuth } from "../lib/AuthContext.jsx";
-import { useData } from "../lib/DataContext.jsx";
 import { passwordProblems } from "../lib/crypto.js";
 import { AuthShell, PasswordInput } from "./Login.jsx";
 
@@ -13,7 +12,6 @@ const ROLE_HELP = {
 
 export default function Register() {
   const { user, register } = useAuth();
-  const { students, teachers } = useData();
   const navigate = useNavigate();
   const [f, setF] = useState({ name: "", email: "", role: "student", linkId: "", phone: "", password: "", confirm: "" });
   const [error, setError] = useState("");
@@ -27,20 +25,11 @@ export default function Register() {
     e.preventDefault();
     setError("");
     if (f.password !== f.confirm) return setError("Passwords don't match.");
+    // The server checks that the student/staff ID exists and links the account to it.
     const id = f.linkId.trim().toUpperCase();
-    const links = {};
-    if (id) {
-      if (f.role === "teacher") {
-        if (!teachers.some((t) => t.id === id)) return setError(`No staff record with ID ${id}. Check with the school office.`);
-        links.teacherId = id;
-      } else {
-        if (!students.some((s) => s.id === id)) return setError(`No student record with ID ${id}. Check with the school office.`);
-        if (f.role === "student") links.studentId = id; else links.childIds = [id];
-      }
-    }
     setBusy(true);
     try {
-      await register({ name: f.name, email: f.email, role: f.role, password: f.password, phone: f.phone, idNumber: id, links });
+      await register({ name: f.name, email: f.email, role: f.role, password: f.password, phone: f.phone, idNumber: id });
       navigate("/login", { replace: true, state: { email: f.email, notice: "Account created! The school admin needs to approve it before you can sign in." } });
     } catch (err) {
       setError(err.message);

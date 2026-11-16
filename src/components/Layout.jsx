@@ -152,11 +152,11 @@ function TopBar({ onMenu }) {
               <button className="dd-item" onClick={() => { setOpen(null); navigate("/my-account"); }}>
                 <Icon name="account" /><span>Account settings</span>
               </button>
-              {ADMINS.includes(user.role) && (
+              {user.role === "superadmin" && (
                 <button className="dd-item" onClick={() => {
                   setOpen(null);
-                  confirm("Reset demo data?", "All changes saved in this browser (accounts, school setup, students, attendance, announcements…) will be replaced with the original sample data.",
-                    () => { resetData(); toast("Demo data reset"); }, "Reset");
+                  confirm("Reset demo data?", "All school data on the server (accounts, passwords, school setup, students, attendance, announcements…) will be replaced with the original sample data for everyone.",
+                    () => resetData().then(() => toast("Demo data reset"), () => {}), "Reset");
                 }}>
                   <Icon name="refresh" /><span>Reset demo data</span>
                 </button>

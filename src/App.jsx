@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { homeFor, useAuth } from "./lib/AuthContext.jsx";
+import { useData } from "./lib/DataContext.jsx";
 import { usePermission } from "./lib/usePermission.js";
 import { ADMINS, STAFF } from "./lib/permissions.js";
 import Layout from "./components/Layout.jsx";
@@ -28,9 +29,18 @@ import Backup from "./pages/Backup.jsx";
 /** Redirects to /login when signed out. */
 function RequireAuth() {
   const { user, checking } = useAuth();
+  const { status, load } = useData();
   const location = useLocation();
   if (checking) return <div role="status" style={{ padding: 32, color: "var(--muted)" }}>Loading…</div>;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (status === "error") {
+    return (
+      <div role="alert" style={{ padding: 32 }}>
+        <p>Couldn't load the school data from the server.</p>
+        <button className="btn" onClick={load}>Try again</button>
+      </div>
+    );
+  }
   return <Layout />;
 }
 

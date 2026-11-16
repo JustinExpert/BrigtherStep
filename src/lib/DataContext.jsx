@@ -1,112 +1,126 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { CLASSES, DATA, SEED } from "../data.js";
-import { DEFAULT_PERMISSIONS, MODULES, ROLES } from "./permissions.js";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { SEED } from "../data.js";
+import { DEFAULT_PERMISSIONS } from "./permissions.js";
+import { api, notify } from "./api.js";
 
-// Store with generic CRUD per collection, saved to this browser's localStorage so changes
-// survive a refresh. Each browser/device has its own copy — nothing is shared between users
-// (a backup file can carry data from one browser to another).
-// To use a real backend, replace these functions with API calls.
+// School data lives on the server (MongoDB, via /api/data). After sign-in the app loads what the
+// user may see; each change updates the screen at once and is then saved by the server, which
+// checks permissions again. If the server refuses a change, the data is reloaded and the reason shown.
 const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities"];
 const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-", activities: "ACT-" };
-const STORAGE_KEY = "brighterstep.data.v1";
 export const BACKUP_APP = "brighterstep";
-export const BACKUP_VERSION = 1;
 
-const SOURCE = { ...DATA, users: SEED.users };
-const seedDb = () => Object.fromEntries(COLLECTIONS.map((c) => [c, structuredClone(SOURCE[c])]));
-const seedRoutine = () => structuredClone(DATA.routine);
-const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
-
-/** Fill any missing module/role cells from the defaults. */
-function normalizePermissions(saved) {
-  return Object.fromEntries(MODULES.map((m) => [m.key, Object.fromEntries(ROLES.map((r) => [r.key, saved?.[m.key]?.[r.key] || DEFAULT_PERMISSIONS[m.key][r.key]]))]));
-}
-
-/** A timetable is valid when every class has 5 days × 6 periods of { subject }. */
-const validRoutine = (r) => isObj(r) && CLASSES.every((c) => Array.isArray(r[c]) && r[c].length === DATA.DAYS.length
-  && r[c].every((day) => Array.isArray(day) && day.length === DATA.PERIODS.length && day.every((s) => isObj(s) && typeof s.subject === "string")));
-
-/**
- * Turns saved (or restored) data into a full, valid state. Keeps each part that looks valid and
- * fills new or broken parts from the sample data — this also upgrades data saved by older versions.
- */
-export function normalizeState(saved) {
-  if (!isObj(saved) || !isObj(saved.db)) return null;
-  const seed = seedDb();
-  return {
-    db: Object.fromEntries(COLLECTIONS.map((c) => [c, Array.isArray(saved.db[c]) ? saved.db[c] : seed[c]])),
-    attendance: isObj(saved.attendance) ? saved.attendance : {},
-    school: isObj(saved.school) ? { ...structuredClone(SEED.school), ...saved.school } : structuredClone(SEED.school),
-    permissions: normalizePermissions(saved.permissions),
-    routine: validRoutine(saved.routine) ? saved.routine : seedRoutine(),
-  };
-}
-
-function loadSaved() {
-  try { return normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY))); } catch { /* blocked or corrupt storage */ }
-  return null;
-}
+const emptyDb = () => Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
+const EMPTY = { db: emptyDb(), attendance: {}, school: structuredClone(SEED.school), permissions: structuredClone(DEFAULT_PERMISSIONS), routine: {} };
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const [initial] = useState(loadSaved);
-  const [db, setDb] = useState(() => initial?.db || seedDb());
-  const [attendance, setAttendance] = useState(() => initial?.attendance || {}); // { "class|date": { studentId: "P" | "A" | "L" } }
-  const [school, setSchool] = useState(() => initial?.school || structuredClone(SEED.school));
-  const [permissions, setPermissions] = useState(() => initial?.permissions || normalizePermissions(null));
-  const [routine, setRoutine] = useState(() => initial?.routine || seedRoutine()); // { class: [day][period] → { subject } }
+  const [state, setState] = useState(EMPTY);
+  const [status, setStatus] = useState("idle"); // idle | loading | ready | error
+  const [publicInfo, setPublicInfo] = useState(null); // school name + totals for the sign-in page
+  const queue = useRef(Promise.resolve());
+  const loadId = useRef(0);
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ db, attendance, school, permissions, routine })); } catch { /* storage full or blocked */ }
-  }, [db, attendance, school, permissions, routine]);
+    api("public").then((d) => setPublicInfo({ school: d.school, counts: d.counts }), () => {});
+  }, []);
 
-  const value = useMemo(() => ({
-    ...db,
-    attendance, school, permissions, routine,
+  /** Loads everything the signed-in user may see. */
+  const load = useCallback(async () => {
+    const id = ++loadId.current;
+    setStatus((s) => (s === "ready" ? s : "loading"));
+    try {
+      const { data } = await api("data");
+      if (id !== loadId.current) return;
+      setState({ db: { ...emptyDb(), ...data.db }, attendance: data.attendance, school: data.school, permissions: data.permissions, routine: data.routine });
+      setStatus("ready");
+    } catch {
+      if (id === loadId.current) setStatus("error");
+    }
+  }, []);
+
+  const clear = useCallback(() => { loadId.current++; setState(EMPTY); setStatus("idle"); }, []);
+
+  /** Sends one change to the server, in order. On refusal: show why and reload the true state. */
+  const send = useCallback((path, body) => {
+    const p = queue.current.then(() => api(path, body));
+    queue.current = p.catch(() => {});
+    p.catch((e) => { if (e.status !== 401) { notify(e.message); load(); } });
+    return p;
+  }, [load]);
+
+  const setDb = (fn) => setState((s) => ({ ...s, db: fn(s.db) }));
+  const merge = (patch) => setState((s) => ({ ...s, ...patch }));
+
+  const actions = useMemo(() => ({
+    load, clear, send,
     add: (col, item) => {
       const id = PREFIX[col] + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
       setDb((d) => ({ ...d, [col]: [{ ...item, id }, ...d[col]] }));
+      send("data", { op: "add", col, item: { ...item, id } });
       return id;
     },
-    update: (col, id, patch) => setDb((d) => ({ ...d, [col]: d[col].map((x) => (x.id === id ? { ...x, ...(typeof patch === "function" ? patch(x) : patch) } : x)) })),
+    update: (col, id, patch) => {
+      setDb((d) => ({ ...d, [col]: d[col].map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+      if (col === "users") send("users", { op: "update", id, patch });
+      else send("data", { op: "update", col, id, patch });
+    },
     remove: (col, ids) => {
-      const set = new Set([].concat(ids));
+      const list = [].concat(ids);
+      const set = new Set(list);
       setDb((d) => ({ ...d, [col]: d[col].filter((x) => !set.has(x.id)) }));
+      if (col === "users") send("users", { op: "delete", ids: list });
+      else send("data", { op: "remove", col, ids: list });
     },
     /** Insert or replace many records by id (used for grades and assignments). */
-    upsertMany: (col, items) => setDb((d) => {
-      const byId = new Map(d[col].map((x) => [x.id, x]));
-      items.forEach((it) => byId.set(it.id, { ...byId.get(it.id), ...it }));
-      return { ...d, [col]: [...byId.values()] };
-    }),
-    saveAttendance: (key, marks) => setAttendance((a) => ({ ...a, [key]: marks })),
-    saveSchool: (patch) => setSchool((s) => ({ ...s, ...patch })),
+    upsertMany: (col, items) => {
+      setDb((d) => {
+        const byId = new Map(d[col].map((x) => [x.id, x]));
+        items.forEach((it) => byId.set(it.id, { ...byId.get(it.id), ...it }));
+        return { ...d, [col]: [...byId.values()] };
+      });
+      if (items.length) send("data", { op: "upsertMany", col, items });
+    },
+    /** Adds or replaces one record locally only (the server already has it). */
+    putLocal: (col, record) => setDb((d) => ({ ...d, [col]: [record, ...d[col].filter((x) => x.id !== record.id)] })),
+    saveAttendance: (key, marks) => {
+      setState((s) => ({ ...s, attendance: { ...s.attendance, [key]: marks } }));
+      send("data", { op: "attendance", key, marks });
+    },
+    saveSchool: (patch) => {
+      setState((s) => ({ ...s, school: { ...s.school, ...patch } }));
+      send("data", { op: "school", patch });
+    },
     /** Sets one timetable slot; subject "" = free period. */
-    setSlot: (cls, day, period, subject) => setRoutine((r) => ({
-      ...r, [cls]: r[cls].map((d, di) => (di !== day ? d : d.map((s, pi) => (pi === period ? { subject } : s)))),
-    })),
-    setPermission: (module, role, level) => setPermissions((p) => ({ ...p, [module]: { ...p[module], [role]: level } })),
-    resetPermissions: () => setPermissions(normalizePermissions(null)),
-    /** Everything needed to restore this browser's data elsewhere. */
-    exportBackup: () => ({ app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data: { db, attendance, school, permissions, routine } }),
-    /** Replaces all data with a (normalized) backup. Returns false when the file isn't a valid backup. */
-    restoreBackup: (file) => {
-      if (!isObj(file) || file.app !== BACKUP_APP) return false;
-      const s = normalizeState(file.data);
-      if (!s) return false;
-      setDb(s.db); setAttendance(s.attendance); setSchool(s.school); setPermissions(s.permissions); setRoutine(s.routine);
-      return true;
+    setSlot: (cls, day, period, subject) => {
+      setState((s) => ({ ...s, routine: { ...s.routine, [cls]: s.routine[cls].map((d, di) => (di !== day ? d : d.map((x, pi) => (pi === period ? { subject } : x)))) } }));
+      send("data", { op: "slot", cls, day, period, subject });
     },
-    resetData: () => {
-      setDb(seedDb());
-      setAttendance({});
-      setSchool(structuredClone(SEED.school));
-      setPermissions(normalizePermissions(null));
-      setRoutine(seedRoutine());
+    setPermission: (module, role, level) => {
+      setState((s) => ({ ...s, permissions: { ...s.permissions, [module]: { ...s.permissions[module], [role]: level } } }));
+      send("data", { op: "permission", module, role, level });
     },
-  }), [db, attendance, school, permissions, routine]);
+    resetPermissions: () => {
+      merge({ permissions: structuredClone(DEFAULT_PERMISSIONS) });
+      send("data", { op: "resetPermissions" });
+    },
+    /** Full backup from the server (Super Admin). */
+    exportBackup: async () => (await api("data?backup=1")).backup,
+    /** Replaces all server data with a backup. Resolves to an error message, or null on success. */
+    restoreBackup: async (file) => {
+      try { await api("data", { op: "restore", backup: file }); } catch (e) { return e.message; }
+      await load();
+      return null;
+    },
+    resetData: async () => {
+      await send("data", { op: "reset" });
+      await load();
+    },
+  }), [load, clear, send]);
 
+  const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, status, publicInfo, ...actions }),
+    [state, status, publicInfo, actions]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 

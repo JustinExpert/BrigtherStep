@@ -19,14 +19,14 @@ export function allow(req, res, methods) {
 }
 
 /** Reads a JSON body (≤ 32 KB). Uses req.body when the platform already parsed it. */
-export async function readJson(req) {
+export async function readJson(req, limit = MAX_BODY) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
   let size = 0;
   const chunks = [];
   for await (const c of req) {
     size += c.length;
-    if (size > MAX_BODY) throw Object.assign(new Error("Body too large"), { status: 413 });
+    if (size > limit) throw Object.assign(new Error("Body too large"), { status: 413 });
     chunks.push(c);
   }
   const text = Buffer.concat(chunks).toString("utf8");

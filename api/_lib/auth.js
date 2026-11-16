@@ -4,6 +4,7 @@
 import crypto from "node:crypto";
 import { getDb } from "./db.js";
 import { cookie, parseCookies } from "./http.js";
+import { signJwt, verifyJwt } from "./jwt.js";
 
 export const SESSION_COOKIE = process.env.VERCEL ? "__Host-bs_session" : "bs_session";
 const ITERATIONS = 100_000;
@@ -93,40 +94,58 @@ export async function attemptLogin(email, password) {
   return { user };
 }
 
-/** Creates a session and returns the Set-Cookie header value. */
+/**
+ * Creates a session and returns the Set-Cookie header value.
+ * The cookie holds a JWT signed with JWT_SECRET: { sub: user id, sid: session id, role, exp }.
+ * The session id is also stored in MongoDB, so logout, password changes and deactivation
+ * take effect at once (a bare JWT would stay valid until it expires).
+ */
 export async function startSession(req, user, remember) {
   const db = await getDb();
   await ensureIndexes(db);
-  const token = crypto.randomBytes(32).toString("base64url");
+  const sid = crypto.randomBytes(18).toString("base64url");
   const ttlMs = remember ? REMEMBER_DAYS * 864e5 : SESSION_HOURS * 3600e3;
+  const jwt = signJwt({ sub: user._id, sid, role: user.role }, ttlMs / 1000); // fails before any write if JWT_SECRET is missing
   const now = new Date();
   await db.collection("sessions").insertOne({
-    _id: sha256(token), userId: user._id, createdAt: now, expiresAt: new Date(now.getTime() + ttlMs),
+    _id: sid, userId: user._id, createdAt: now, expiresAt: new Date(now.getTime() + ttlMs),
     userAgent: String(req.headers?.["user-agent"] || "").slice(0, 200),
   });
   await db.collection("users").updateOne({ _id: user._id }, { $set: { lastLogin: now.toISOString() } });
   // Without "remember me" the cookie has no Max-Age, so it ends when the browser closes.
-  return cookie(req, SESSION_COOKIE, token, remember ? { maxAge: ttlMs / 1000 } : {});
+  return cookie(req, SESSION_COOKIE, jwt, remember ? { maxAge: ttlMs / 1000 } : {});
+}
+
+/** The verified JWT claims from this request's cookie, or null. A forged or expired token never reaches the database. */
+function sessionClaims(req) {
+  const claims = verifyJwt(parseCookies(req)[SESSION_COOKIE]);
+  return claims && typeof claims.sid === "string" && typeof claims.sub === "string" ? claims : null;
 }
 
 /** Returns the signed-in, active user for this request, or null. */
 export async function currentUser(req) {
-  const token = parseCookies(req)[SESSION_COOKIE];
-  if (!token || token.length > 100) return null;
+  const claims = sessionClaims(req);
+  if (!claims) return null;
   const db = await getDb();
-  const session = await db.collection("sessions").findOne({ _id: sha256(token), expiresAt: { $gt: new Date() } });
+  const session = await db.collection("sessions").findOne({ _id: claims.sid, userId: claims.sub, expiresAt: { $gt: new Date() } });
   if (!session) return null;
-  const user = await db.collection("users").findOne({ _id: session.userId });
+  const user = await db.collection("users").findOne({ _id: claims.sub });
   return user && user.status === "active" ? user : null; // deactivated accounts lose access at once
 }
 
 export async function endSession(req) {
-  const token = parseCookies(req)[SESSION_COOKIE];
-  if (token && token.length <= 100) {
+  const claims = sessionClaims(req);
+  if (claims) {
     const db = await getDb();
-    await db.collection("sessions").deleteOne({ _id: sha256(token) });
+    await db.collection("sessions").deleteOne({ _id: claims.sid });
   }
   return cookie(req, SESSION_COOKIE, "", { maxAge: 0 });
+}
+
+/** Signs a user out everywhere (used when an admin deactivates or deletes an account). */
+export async function endAllSessions(userId) {
+  const db = await getDb();
+  await db.collection("sessions").deleteMany({ userId });
 }
 
 /** Same rules as the app's sign-up form. Returns a list of problems; empty means OK. */
@@ -140,12 +159,34 @@ export function passwordProblems(pw) {
   return out;
 }
 
-/** Stores a new password and signs out every other session of this user. */
+/** A fresh { salt, passwordHash } for a new password. */
+export function newSecret(password) {
+  const salt = crypto.randomBytes(16).toString("base64");
+  return { salt, passwordHash: hash(password, salt).toString("base64") };
+}
+
+/** Stores a new password and signs out every other session of this user (all of them when req is null). */
 export async function setPassword(req, user, password) {
   const db = await getDb();
-  const salt = crypto.randomBytes(16).toString("base64");
-  const passwordHash = hash(password, salt).toString("base64");
-  await db.collection("users").updateOne({ _id: user._id }, { $set: { salt, passwordHash }, $unset: { resetTokenHash: "", resetExpires: "" } });
-  const token = parseCookies(req)[SESSION_COOKIE];
-  await db.collection("sessions").deleteMany({ userId: user._id, _id: { $ne: token ? sha256(token) : "" } });
+  await db.collection("users").updateOne({ _id: user._id }, { $set: newSecret(password), $unset: { resetTokenHash: "", resetExpires: "" } });
+  const keep = req && sessionClaims(req)?.sid;
+  await db.collection("sessions").deleteMany({ userId: user._id, ...(keep ? { _id: { $ne: keep } } : {}) });
 }
+
+/** One-time password-reset token (30 minutes). Only its hash is stored. */
+export async function createResetToken(user) {
+  const db = await getDb();
+  const token = crypto.randomBytes(24).toString("base64url");
+  await db.collection("users").updateOne({ _id: user._id }, { $set: { resetTokenHash: sha256(token), resetExpires: Date.now() + 30 * 60_000 } });
+  return token;
+}
+
+/** The active account a reset token belongs to, or null if it is wrong or expired. */
+export async function userForResetToken(token) {
+  if (typeof token !== "string" || !token || token.length > 100) return null;
+  const db = await getDb();
+  const user = await db.collection("users").findOne({ resetTokenHash: sha256(token), resetExpires: { $gt: Date.now() } });
+  return user && user.status === "active" ? user : null;
+}
+
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

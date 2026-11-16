@@ -34,8 +34,11 @@ export function UIProvider({ children }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && setModal(null);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
+    // Data and auth sit outside this provider, so they report failed saves with an event.
+    const onError = (e) => toast(e.detail);
+    window.addEventListener("bs:toast", onError);
+    return () => { document.removeEventListener("keydown", onKey); window.removeEventListener("bs:toast", onError); };
+  }, [toast]);
 
   return (
     <UIContext.Provider value={{ toast, openModal, closeModal, confirm }}>

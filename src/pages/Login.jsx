@@ -15,7 +15,10 @@ export const DEMO_ACCOUNTS = [
 
 /** Shared two-column frame for login, register and password reset. */
 export function AuthShell({ children }) {
-  const { school, students, teachers, classes } = useData();
+  // Before sign-in only the school's name and totals are available (from /api/public).
+  const { publicInfo } = useData();
+  const school = publicInfo?.school || { name: "BrighterStep", motto: "" };
+  const n = (k) => publicInfo?.counts?.[k] ?? "—";
   return (
     <div className="login">
       <section className="login-art">
@@ -27,9 +30,9 @@ export function AuthShell({ children }) {
           <p>{school.motto} Students, teachers, parents, classes, timetables, attendance and announcements, all in one place.</p>
         </div>
         <div className="login-stats">
-          <div><b>{students.length}</b><span>Students</span></div>
-          <div><b>{teachers.length}</b><span>Teachers</span></div>
-          <div><b>{classes.length}</b><span>Classes</span></div>
+          <div><b>{n("students")}</b><span>Students</span></div>
+          <div><b>{n("teachers")}</b><span>Teachers</span></div>
+          <div><b>{n("classes")}</b><span>Classes</span></div>
         </div>
       </section>
       <section className="login-form-wrap">{children}</section>

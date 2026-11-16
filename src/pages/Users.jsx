@@ -114,7 +114,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
 }
 
 export default function Users() {
-  const { user: me, createUser, requestReset } = useAuth();
+  const { user: me, createUser, adminResetLink } = useAuth();
   const { users, students, teachers, update, remove } = useData();
   const { openModal, closeModal, confirm, toast } = useUI();
   const can = usePermission();
@@ -133,8 +133,7 @@ export default function Users() {
 
   const add = () => openModal("Add User", (
     <UserForm actorRole={me.role} onCancel={closeModal} onSave={async ({ password, links, ...data }) => {
-      const id = await createUser({ ...data, password, links });
-      if (data.photo) update("users", id, { photo: data.photo });
+      await createUser({ ...data, password, links });
       openModal("Account created", (
         <>
           <p style={{ marginTop: 0 }}>Share these sign-in details with <b>{data.name}</b> privately:</p>
@@ -161,7 +160,8 @@ export default function Users() {
   };
 
   const sendReset = async (u) => {
-    const token = await requestReset(u.email);
+    let token;
+    try { token = await adminResetLink(u.id); } catch (e) { return toast(e.message); }
     if (!token) return toast("Only active accounts can reset their password");
     openModal("Password reset link sent", (
       <>

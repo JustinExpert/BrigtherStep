@@ -15,7 +15,8 @@ export function ForgotPassword() {
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    const token = await requestReset(email);
+    let token = null;
+    try { token = await requestReset(email); } catch { /* same message either way */ }
     setDemoLink(token ? `#/reset-password/${token}` : null);
     setSent(true);
     setBusy(false);
@@ -31,14 +32,16 @@ export function ForgotPassword() {
         {sent ? (
           <>
             {/* Same message whether or not the account exists, so emails can't be discovered. */}
-            <div className="alert info">If an active account exists for <b>{email}</b>, a reset link has been sent. It expires in 30 minutes.</div>
-            <div className="demo-mail">
-              <b>📬 Demo mailbox</b>
-              <p>This demo has no email server, so the message is shown here instead.</p>
-              {demoLink
-                ? <a className="btn block" href={demoLink}>Open reset link</a>
-                : <p style={{ margin: 0 }}><i>No email was sent (no active account with that address).</i></p>}
-            </div>
+            <div className="alert info">If an active account exists for <b>{email}</b>, a reset link has been prepared. It expires in 30 minutes.</div>
+            {demoLink ? (
+              <div className="demo-mail">
+                <b>📬 Demo mailbox</b>
+                <p>This demo has no email server, so the message is shown here instead.</p>
+                <a className="btn block" href={demoLink}>Open reset link</a>
+              </div>
+            ) : (
+              <p className="hint">Email isn't set up yet. If you don't get a link, ask the school admin to send you one from User Management.</p>
+            )}
           </>
         ) : (
           <>

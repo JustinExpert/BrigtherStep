@@ -31,6 +31,7 @@ export async function getDb() {
 /** Turns a driver error into a short, safe reason (never includes the connection string). */
 export function safeReason(e) {
   const msg = String(e?.message || "");
+  if (e?.code === "NO_SECRET") return "JWT_SECRET is not set in Vercel → Settings → Environment Variables.";
   if (e?.code === "NO_URI") return "MONGODB_URI is not set in Vercel → Settings → Environment Variables.";
   if (/auth|Authentication failed/i.test(msg)) return "Atlas rejected the username or password in MONGODB_URI.";
   if (/querySrv|ENOTFOUND|getaddrinfo/i.test(msg)) return "The cluster address in MONGODB_URI could not be found.";
