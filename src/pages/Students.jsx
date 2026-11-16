@@ -22,7 +22,7 @@ export const STUDENT_FIELDS = [
 ];
 
 const newStudentDefaults = () => ({
-  marks: 0, percent: 0, attendance: 100, fees: "Pending", year: new Date().getFullYear(),
+  marks: 0, percent: 0, attendance: 100, year: new Date().getFullYear(),
   color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
 });
 
@@ -97,7 +97,7 @@ export function StudentDetails({ selfId }) {
           <Avatar name={s.name} color={s.color} size="lg" />
           <h2>{s.name}</h2>
           <span style={{ color: "var(--muted)" }}>{s.id} · Class {s.class} · Roll {s.roll}</span>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /><Badge value={`Fees ${s.fees}`} cls={s.fees === "Paid" ? "b-green" : s.fees === "Pending" ? "b-amber" : "b-red"} /></div>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
             <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{s.attendance}%</b></div></div>
             <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>Score</span><b style={{ fontSize: 22 }}>{s.percent}%</b></div></div>

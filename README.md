@@ -1,8 +1,11 @@
 # BrighterStep – School Management (demo)
 
-A React + Vite school management system with five roles (Super Admin, School Admin,
-Teacher, Student, Parent), user accounts, school setup, a role permission matrix,
-attendance, timetables, online exams and more.
+A React + Vite school management system scoped to **MVP1**: five roles (Super Admin,
+School Admin, Teacher, Student, Parent), user accounts, school setup, a role permission
+matrix, classes, subjects, class lists, timetables, attendance and announcements.
+
+Features outside MVP1 (online exams, exam schedule, library, fees, transport, hostel,
+messages) were removed for testing; they are preserved in git history at commit `34e1775`.
 
 ## Run locally
 

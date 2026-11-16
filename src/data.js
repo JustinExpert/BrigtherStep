@@ -34,7 +34,7 @@ const students = Array.from({ length: 64 }, (_, i) => {
     marks,
     percent: Math.round((marks / 1200) * 100),
     attendance: int(78, 100),
-    fees: pick(["Paid", "Paid", "Paid", "Pending", "Overdue"]),
+    _r: void pick([0, 0, 0, 0, 0]), // keeps the generated sample names the same as before
     year: 2026,
     color: pick(AVATAR_COLORS),
   };
@@ -58,22 +58,11 @@ const teachers = [
 
 const notices = [
   { id: "N1", type: "teacher", title: "New Teacher", body: "Please welcome Owen Silva, who joins the Science department this week.", date: "2026-11-16", author: "Admin" },
-  { id: "N2", type: "fees", title: "Fees Structure", body: "The fee structure for Term 3 has been published. Payment is due by December 15.", date: "2026-11-15", author: "Accounts" },
+  { id: "N2", type: "event", title: "Parent–Teacher Conference", body: "Parent–teacher conferences are on November 21. Please book a slot with your child’s class teacher.", date: "2026-11-15", author: "Admin" },
   { id: "N3", type: "course", title: "New Course", body: "An after-school robotics course opens for classes 04–06. Sign up at the office.", date: "2026-11-10", author: "Admin" },
   { id: "N4", type: "event", title: "Science Fair", body: "The annual science fair will be held in the main hall on November 28.", date: "2026-11-06", author: "Daniel Cruz" },
-  { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. The timetable is on the Exam page.", date: "2026-11-02", author: "Exams Office" },
+  { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. Check your class timetable for any changes.", date: "2026-11-02", author: "Exams Office" },
 ];
-
-const books = [
-  ["The Number Devil", "H. M. Enzensberger", "Mathematics"], ["A Short History of Nearly Everything", "Bill Bryson", "Science"],
-  ["Charlotte's Web", "E. B. White", "English"], ["The Diary of a Young Girl", "Anne Frank", "History"],
-  ["National Geographic Kids Atlas", "NG Kids", "Geography"], ["The Art Book for Children", "Phaidon", "Art"],
-  ["Hello Ruby", "Linda Liukas", "Computer"], ["Wonder", "R. J. Palacio", "English"], ["Matilda", "Roald Dahl", "English"],
-  ["The Way Things Work Now", "David Macaulay", "Science"],
-].map(([title, author, subject], i) => {
-  const copies = int(3, 12);
-  return { id: "BK-" + (501 + i), title, author, subject, class: pick(CLASSES), copies, available: int(0, copies) };
-});
 
 const classes = CLASSES.map((c, i) => ({
   id: "CLS-" + c, name: "Class " + c, section: pick(["A", "B"]), teacher: teachers[i].name, room: "R-" + (101 + i), capacity: 40,
@@ -85,22 +74,6 @@ const subjects = SUBJECTS.map((s, i) => ({
   type: ["Science", "Computer", "Art", "Physical Ed."].includes(s) ? "Practical" : "Theory",
   classes: "01–06",
 }));
-
-const exams = [
-  ["Mid-term", "Mathematics", "04", "2026-12-01", "09:00"], ["Mid-term", "English", "04", "2026-12-02", "09:00"],
-  ["Mid-term", "Science", "05", "2026-12-03", "09:00"], ["Mid-term", "History", "06", "2026-12-04", "10:30"],
-  ["Unit test", "Computer", "03", "2026-11-24", "11:00"], ["Unit test", "Geography", "02", "2026-11-25", "11:00"],
-].map(([name, subject, cls, date, time], i) => ({ id: "EX-" + (601 + i), name, subject, class: cls, date, time, room: "Hall " + ((i % 3) + 1) }));
-
-const routes = [
-  ["Route 1", "North Hills", "BUS-12", "Tomas Reyes", 8, 45], ["Route 2", "Riverside", "BUS-07", "Ana Lopez", 6, 40],
-  ["Route 3", "City Centre", "VAN-03", "Kofi Mensah", 5, 35], ["Route 4", "Lakeview", "BUS-15", "Mei Lin", 9, 50],
-].map(([route, area, vehicle, driver, stops, fare], i) => ({ id: "TR-" + (701 + i), route, area, vehicle, driver, phone: `+123 66${pad(int(0, 99999), 5)}`, stops, fare }));
-
-const rooms = Array.from({ length: 8 }, (_, i) => {
-  const beds = pick([2, 3, 4]);
-  return { id: "HS-" + (801 + i), hostel: i < 4 ? "Oak House (Boys)" : "Maple House (Girls)", room: String(101 + (i % 4)), type: beds === 2 ? "Twin" : "Shared", beds, occupied: int(0, beds), fee: beds === 2 ? 320 : 260 };
-});
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const PERIODS = ["08:00", "08:50", "09:40", "10:50", "11:40", "12:30"];
@@ -115,73 +88,7 @@ const attendanceChart = {
   teachers: [96, 97, 94, 98, 97, 93, 0, 91, 98, 97, 96, 0],
 };
 
-const messages = [
-  { from: "Grace Okafor", text: "Can we move the maths quiz to Friday?", time: "10m" },
-  { from: "Accounts", text: "Term 3 invoices are ready for review.", time: "1h" },
-  { from: "Daniel Cruz", text: "The science fair room is booked.", time: "3h" },
-];
-
-// ---------- Online exams (multiple choice, auto-graded) ----------
-const q = (text, options, answer, marks = 1) => ({ id: "Q" + Math.floor(rnd() * 1e9).toString(36), text, options, answer, marks });
-const demoClass = students[0].class; // the demo student's class, so they have exams to take
-
-const onlineExams = [
-  {
-    id: "OE-1", title: "Numbers & Operations Quiz", subject: "Mathematics", class: demoClass, duration: 15,
-    status: "published", showAnswers: true, createdBy: "Grace Okafor", createdAt: "2026-11-12",
-    questions: [
-      q("7 + 8 = ?", ["13", "14", "15", "16"], 2),
-      q("36 ÷ 6 = ?", ["5", "6", "7", "8"], 1),
-      q("Which number is even?", ["15", "21", "28", "33"], 2),
-      q("9 × 4 = ?", ["32", "36", "38", "40"], 1),
-      q("What is half of 50?", ["20", "25", "30", "35"], 1),
-      q("How many sides does a hexagon have?", ["5", "6", "7", "8"], 1),
-      q("100 − 37 = ?", ["63", "67", "73", "77"], 0, 2),
-      q("Which number is the largest?", ["0.5", "0.45", "0.405", "0.054"], 0, 2),
-    ],
-  },
-  {
-    id: "OE-2", title: "Living Things & Matter", subject: "Science", class: demoClass, duration: 10,
-    status: "published", showAnswers: false, createdBy: "Daniel Cruz", createdAt: "2026-11-14",
-    questions: [
-      q("What do plants need to make their food?", ["Sunlight", "Sand", "Plastic", "Salt"], 0),
-      q("Which of these is a mammal?", ["Shark", "Dolphin", "Salmon", "Octopus"], 1),
-      q("At sea level, water boils at…", ["50 °C", "90 °C", "100 °C", "120 °C"], 2),
-      q("Which planet is closest to the Sun?", ["Venus", "Earth", "Mercury", "Mars"], 2),
-      q("Which gas do we need to breathe in to live?", ["Oxygen", "Carbon dioxide", "Helium", "Nitrogen"], 0),
-      q("Ice is water in which state?", ["Gas", "Liquid", "Solid", "Plasma"], 2),
-    ],
-  },
-  {
-    id: "OE-3", title: "Grammar Check", subject: "English", class: "04", duration: 12,
-    status: "draft", showAnswers: true, createdBy: "Hannah Kim", createdAt: "2026-11-15",
-    questions: [
-      q('What is the plural of "child"?', ["childs", "children", "childes", "child's"], 1),
-      q("Which word is a verb?", ["quickly", "happy", "run", "blue"], 2),
-      q('What is the opposite of "ancient"?', ["old", "modern", "broken", "large"], 1),
-      q("Choose the correct sentence.", ["She don't like apples.", "She doesn't like apples.", "She not like apples.", "She doesn't likes apples."], 1),
-      q('Which word means the same as "begin"?', ["end", "start", "stop", "finish"], 1),
-    ],
-  },
-];
-
-// Sample submissions from the demo student's classmates (not the demo student).
-const submissions = [];
-for (const exam of onlineExams.filter((e) => e.status !== "draft")) {
-  students.filter((s) => s.class === exam.class && s.id !== students[0].id).forEach((s, i) => {
-    if (rnd() > (exam.id === "OE-1" ? 0.85 : 0.4)) return;
-    const answers = exam.questions.map((qq) => (rnd() < s.percent / 100 ? qq.answer : (qq.answer + int(1, qq.options.length - 1)) % qq.options.length));
-    const score = exam.questions.reduce((a, qq, k) => a + (answers[k] === qq.answer ? qq.marks : 0), 0);
-    const total = exam.questions.reduce((a, qq) => a + qq.marks, 0);
-    submissions.push({
-      id: `RES-${exam.id}-${i}`, examId: exam.id, studentId: s.id, status: "submitted", answers, score, total,
-      startedAt: Date.parse("2026-11-15T09:00:00"), submittedAt: `2026-11-15T09:${pad(int(5, 14))}:00`,
-      timeTaken: int(180, exam.duration * 60 - 20), tabSwitches: rnd() < 0.15 ? int(1, 3) : 0, auto: false,
-    });
-  });
-}
-
-export const DATA = { students, teachers, notices, books, classes, subjects, exams, routes, rooms, routine, attendanceChart, messages, DAYS, PERIODS, onlineExams, submissions };
+export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.

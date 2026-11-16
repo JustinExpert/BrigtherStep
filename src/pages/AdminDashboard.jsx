@@ -6,7 +6,6 @@ import Icon from "../components/Icon.jsx";
 import DataTable from "../components/DataTable.jsx";
 import { Avatar, FEED_TONES, Gauge, GroupedBarChart, StatTile } from "../components/ui.jsx";
 
-const TERM_FEE = 2800;
 
 export function NoticeFeed({ notices, limit = 4 }) {
   return (
@@ -26,11 +25,10 @@ export function NoticeFeed({ notices, limit = 4 }) {
 }
 
 export default function AdminDashboard() {
-  const { students, teachers, notices } = useData();
+  const { students, teachers, notices, classes } = useData();
   const navigate = useNavigate();
   const male = students.filter((s) => s.gender === "Male").length;
   const parents = new Set(students.map((s) => s.parent)).size;
-  const earnings = students.filter((s) => s.fees === "Paid").length * TERM_FEE;
   const stars = [...students].sort((a, b) => b.marks - a.marks).slice(0, 5);
   const { labels, students: sAtt, teachers: tAtt } = DATA.attendanceChart;
 
@@ -42,7 +40,7 @@ export default function AdminDashboard() {
           <StatTile label="Students" value={compact(students.length)} icon="cap" tone="purple" />
           <StatTile label="Teachers" value={compact(teachers.length)} icon="teacher" tone="blue" />
           <StatTile label="Parents" value={compact(parents)} icon="parents" tone="orange" />
-          <StatTile label="Earnings" value={"$" + compact(earnings)} icon="money" tone="green" />
+          <StatTile label="Classes" value={classes.length} icon="class" tone="green" />
         </div>
       </div>
 
@@ -82,7 +80,7 @@ export default function AdminDashboard() {
           actions={{ onView: (r) => navigate(`/students/${r.id}`) }}
         />
         <div className="card">
-          <div className="card-head"><h3>Latest Notices</h3><button className="icon-btn" onClick={() => navigate("/notice")} aria-label="Open notices"><Icon name="more" /></button></div>
+          <div className="card-head"><h3>Latest Announcements</h3><button className="icon-btn" onClick={() => navigate("/notice")} aria-label="Open announcements"><Icon name="more" /></button></div>
           <NoticeFeed notices={notices} />
         </div>
       </div>

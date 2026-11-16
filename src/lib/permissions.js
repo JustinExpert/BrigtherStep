@@ -5,9 +5,9 @@
 export const ROLES = [
   { key: "superadmin", label: "Super Admin", desc: "Owns the system: school setup, roles and all accounts.", color: "#5327ae" },
   { key: "admin", label: "School Admin", desc: "Runs day-to-day school operations and manages users.", color: "#7b2cdf" },
-  { key: "teacher", label: "Teacher", desc: "Manages classes, attendance, exams and notices.", color: "#ff7a3d" },
-  { key: "student", label: "Student", desc: "Sees their own schedule, exams, attendance and fees.", color: "#2fb36c" },
-  { key: "parent", label: "Parent", desc: "Follows their children's progress, attendance and fees.", color: "#2f8cf0" },
+  { key: "teacher", label: "Teacher", desc: "Manages their classes, class lists, attendance and announcements.", color: "#ff7a3d" },
+  { key: "student", label: "Student", desc: "Sees their own profile, schedule, subjects, attendance and announcements.", color: "#2fb36c" },
+  { key: "parent", label: "Parent", desc: "Follows their children's schedule, attendance and announcements.", color: "#2f8cf0" },
 ];
 export const ROLE_LABEL = Object.fromEntries(ROLES.map((r) => [r.key, r.label]));
 export const ROLE_COLOR = Object.fromEntries(ROLES.map((r) => [r.key, r.color]));
@@ -27,13 +27,7 @@ export const MODULES = [
   { key: "subjects", label: "Subjects", group: "Academic" },
   { key: "routine", label: "Routine / Timetable", group: "Academic" },
   { key: "attendance", label: "Attendance", group: "Academic" },
-  { key: "exams", label: "Exam Schedule", group: "Assessment" },
-  { key: "onlineExams", label: "Online Exams", group: "Assessment" },
-  { key: "notices", label: "Notices", group: "Communication" },
-  { key: "library", label: "Library", group: "Services" },
-  { key: "fees", label: "Fees", group: "Services" },
-  { key: "transport", label: "Transport", group: "Services" },
-  { key: "hostel", label: "Hostel", group: "Services" },
+  { key: "notices", label: "Announcements", group: "Communication" },
 ];
 
 const row = (superadmin, admin, teacher, student, parent) => ({ superadmin, admin, teacher, student, parent });
@@ -47,17 +41,11 @@ export const DEFAULT_PERMISSIONS = {
   subjects: row("edit", "edit", "view", "view", "view"),
   routine: row("view", "view", "view", "view", "view"),
   attendance: row("edit", "edit", "edit", "none", "none"),
-  exams: row("edit", "edit", "edit", "view", "view"),
-  onlineExams: row("edit", "edit", "edit", "view", "none"),
   notices: row("edit", "edit", "edit", "view", "view"),
-  library: row("edit", "edit", "view", "view", "none"),
-  fees: row("edit", "edit", "none", "none", "none"),
-  transport: row("edit", "edit", "none", "none", "view"),
-  hostel: row("edit", "edit", "none", "none", "none"),
 };
 
 // Modules that list other people's records — students and parents must never get these.
-const PRIVATE_LISTS = ["school", "users", "roles", "students", "teachers", "attendance", "fees"];
+const PRIVATE_LISTS = ["school", "users", "roles", "students", "teachers", "attendance"];
 
 /**
  * Cells that can't be changed: the Super Admin always keeps full access, only admins can manage

@@ -24,7 +24,7 @@ export function AuthShell({ children }) {
         <div className="logo"><Logo />BrighterStep</div>
         <div style={{ position: "relative" }}>
           <h1>{school.name}</h1>
-          <p>{school.motto} Students, teachers, parents, classes, attendance, exams and fees, all in one place.</p>
+          <p>{school.motto} Students, teachers, parents, classes, timetables, attendance and announcements, all in one place.</p>
         </div>
         <div className="login-stats">
           <div><b>{students.length}</b><span>Students</span></div>

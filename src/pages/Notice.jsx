@@ -8,7 +8,7 @@ import Icon from "../components/Icon.jsx";
 import RecordForm from "../components/RecordForm.jsx";
 import { FEED_TONES, PageHead } from "../components/ui.jsx";
 
-const TYPES = ["event", "exam", "fees", "course", "teacher"];
+const TYPES = ["general", "event", "exam", "course", "teacher"];
 
 export default function Notice() {
   const { user } = useAuth();
@@ -16,7 +16,7 @@ export default function Notice() {
   const can = usePermission();
   const { openModal, closeModal, confirm, toast } = useUI();
 
-  const create = () => openModal("Post Notice", (
+  const create = () => openModal("Post Announcement", (
     <RecordForm
       fields={[
         { key: "title", label: "Title", required: true, full: true },
@@ -24,14 +24,14 @@ export default function Notice() {
         { key: "body", label: "Message", type: "textarea", required: true },
       ]}
       submitLabel="Post notice" onCancel={closeModal}
-      onSubmit={(v) => { add("notices", { ...v, date: todayIso(), author: user.name }); closeModal(); toast("Notice posted"); }}
+      onSubmit={(v) => { add("notices", { ...v, date: todayIso(), author: user.name }); closeModal(); toast("Announcement posted"); }}
     />
   ));
 
   return (
     <>
-      <PageHead title="Notice Board" crumbs={["Notice"]}>
-        {can("notices", "edit") && <button className="btn" onClick={create}><Icon name="plus" />Post Notice</button>}
+      <PageHead title="Announcements" crumbs={["Announcements"]}>
+        {can("notices", "edit") && <button className="btn" onClick={create}><Icon name="plus" />Post Announcement</button>}
       </PageHead>
       <div className="notice-grid">
         {notices.map((n) => {
@@ -43,8 +43,8 @@ export default function Notice() {
                 <span className={`feed-icon ${tone}`}><Icon name={icon} /></span>
                 <div><h3 style={{ fontSize: 16 }}>{n.title}</h3><small style={{ textTransform: "capitalize" }}>{n.type}</small></div>
                 {canDelete && (
-                  <button className="icon-btn danger" style={{ marginLeft: "auto" }} aria-label="Delete notice"
-                    onClick={() => confirm("Delete notice?", `"${n.title}" will be removed.`, () => { remove("notices", n.id); toast("Notice deleted"); })}>
+                  <button className="icon-btn danger" style={{ marginLeft: "auto" }} aria-label="Delete announcement"
+                    onClick={() => confirm("Delete announcement?", `"${n.title}" will be removed.`, () => { remove("notices", n.id); toast("Announcement deleted"); })}>
                     <Icon name="trash" />
                   </button>
                 )}
@@ -54,7 +54,7 @@ export default function Notice() {
             </article>
           );
         })}
-        {!notices.length && <div className="card empty">No notices yet.</div>}
+        {!notices.length && <div className="card empty">No announcements yet.</div>}
       </div>
     </>
   );

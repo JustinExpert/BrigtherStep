@@ -15,15 +15,10 @@ import TeacherDashboard from "./pages/TeacherDashboard.jsx";
 import StudentDashboard from "./pages/StudentDashboard.jsx";
 import ParentDashboard from "./pages/ParentDashboard.jsx";
 import Students, { AdmissionForm, StudentDetails } from "./pages/Students.jsx";
-import { Classes, Exams, Hostel, Library, Subjects, Teachers, Transport } from "./pages/Records.jsx";
-import Fees from "./pages/Fees.jsx";
+import { Classes, Subjects, Teachers } from "./pages/Records.jsx";
 import Routine from "./pages/Routine.jsx";
 import Attendance from "./pages/Attendance.jsx";
 import Notice from "./pages/Notice.jsx";
-import OnlineExams from "./pages/OnlineExams.jsx";
-import ExamBuilder from "./pages/ExamBuilder.jsx";
-import ExamResults from "./pages/ExamResults.jsx";
-import TakeExam, { ExamReview } from "./pages/TakeExam.jsx";
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
@@ -70,8 +65,6 @@ export default function App() {
         <Route element={<RequireRole roles={["student"]} />}>
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/profile" element={<MyProfile />} />
-          <Route path="/online-exams/:id/take" element={<TakeExam />} />
-          <Route path="/online-exams/:id/review" element={<ExamReview />} />
         </Route>
 
         {/* Modules, controlled by the Roles & Permissions matrix */}
@@ -86,16 +79,7 @@ export default function App() {
         {guard("subjects", "view", "/subject", <Subjects />)}
         {guard("routine", "view", "/routine", <Routine />)}
         {guard("attendance", "view", "/attendance", <Attendance />)}
-        {guard("exams", "view", "/exam", <Exams />)}
-        {guard("onlineExams", "view", "/online-exams", <OnlineExams />)}
-        {guard("onlineExams", "edit", "/online-exams/new", <ExamBuilder />)}
-        {guard("onlineExams", "edit", "/online-exams/:id/edit", <ExamBuilder />)}
-        {guard("onlineExams", "edit", "/online-exams/:id/results", <ExamResults />)}
         {guard("notices", "view", "/notice", <Notice />)}
-        {guard("library", "view", "/library", <Library />)}
-        {guard("fees", "view", "/account/fees", <Fees />)}
-        {guard("transport", "view", "/transport", <Transport />)}
-        {guard("hostel", "view", "/hostel", <Hostel />)}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

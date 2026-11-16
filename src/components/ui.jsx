@@ -38,7 +38,7 @@ export const StatTile = ({ label, value, icon, tone }) => (
 );
 
 export const FEED_TONES = {
-  teacher: ["tone-blue", "teacher"], fees: ["tone-orange", "money"], course: ["tone-green", "course"],
+  general: ["tone-purple", "notice"], teacher: ["tone-blue", "teacher"], fees: ["tone-orange", "money"], course: ["tone-green", "course"],
   event: ["tone-purple", "event"], exam: ["tone-purple", "exam"],
 };
 

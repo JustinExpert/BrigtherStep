@@ -7,7 +7,6 @@ import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { ADMINS, ROLE_COLOR, ROLE_LABEL, STAFF } from "../lib/permissions.js";
-import { DATA } from "../data.js";
 import { relTime } from "../lib/utils.js";
 
 /*
@@ -34,21 +33,11 @@ export const NAV = [
   { label: "Teachers", icon: "teachers", children: [
     { to: "/teachers", label: "All Teachers", module: "teachers" },
   ]},
-  { to: "/library", label: "Library", icon: "book", module: "library" },
-  { label: "Account", icon: "account", children: [
-    { to: "/account/fees", label: "Fees Collection", module: "fees" },
-  ]},
   { to: "/class", label: "Class", icon: "class", module: "classes" },
   { to: "/subject", label: "Subject", icon: "subject", module: "subjects" },
   { to: "/routine", label: "Routine", icon: "calendar", module: "routine" },
   { to: "/attendance", label: "Attendance", icon: "list", module: "attendance" },
-  { label: "Exam", icon: "exam", children: [
-    { to: "/exam", label: "Exam Schedule", module: "exams" },
-    { to: "/online-exams", label: "Online Exams", module: "onlineExams" },
-  ]},
-  { to: "/notice", label: "Notice", icon: "notice", module: "notices" },
-  { to: "/transport", label: "Transport", icon: "bus", module: "transport" },
-  { to: "/hostel", label: "Hostel", icon: "building", module: "hostel" },
+  { to: "/notice", label: "Announcements", icon: "notice", module: "notices" },
 ];
 export const ALL_ROUTES = NAV.flatMap((n) => (n.children ? n.children : [n]));
 
@@ -102,7 +91,6 @@ function TopBar({ onMenu }) {
   const [q, setQ] = useState("");
   const ref = useClickAway(() => setOpen(null));
   const toggle = (k) => { setOpen((o) => (o === k ? null : k)); if (k === "bell") setSeen(true); };
-  const isStaff = STAFF.includes(user.role);
 
   const onSearch = (e) => {
     e.preventDefault();
@@ -129,7 +117,7 @@ function TopBar({ onMenu }) {
             <button className="round-btn" onClick={() => toggle("bell")} aria-label="Notifications"><Icon name="bell" />{!seen && <span className="dot" />}</button>
             {open === "bell" && (
               <div className="dropdown">
-                <h4>Notifications</h4>
+                <h4>Announcements</h4>
                 {notices.slice(0, 4).map((n) => {
                   const [tone, icon] = FEED_TONES[n.type] || FEED_TONES.event;
                   return (
@@ -139,23 +127,6 @@ function TopBar({ onMenu }) {
                     </button>
                   );
                 })}
-              </div>
-            )}
-          </div>
-        )}
-        {isStaff && (
-          <div className="dropdown-wrap">
-            <button className="round-btn" onClick={() => toggle("chat")} aria-label="Messages"><Icon name="chat" /></button>
-            {open === "chat" && (
-              <div className="dropdown">
-                <h4>Messages</h4>
-                {DATA.messages.map((m) => (
-                  <div key={m.from} className="dd-item">
-                    <Avatar name={m.from} />
-                    <span><b>{m.from}</b><small>{m.text}</small></span>
-                    <small style={{ marginLeft: "auto", color: "var(--muted)" }}>{m.time}</small>
-                  </div>
-                ))}
               </div>
             )}
           </div>
@@ -175,7 +146,7 @@ function TopBar({ onMenu }) {
               {ADMINS.includes(user.role) && (
                 <button className="dd-item" onClick={() => {
                   setOpen(null);
-                  confirm("Reset demo data?", "All changes saved in this browser (accounts, school setup, students, attendance, exams…) will be replaced with the original sample data.",
+                  confirm("Reset demo data?", "All changes saved in this browser (accounts, school setup, students, attendance, announcements…) will be replaced with the original sample data.",
                     () => { resetData(); toast("Demo data reset"); }, "Reset");
                 }}>
                   <Icon name="refresh" /><span>Reset demo data</span>
