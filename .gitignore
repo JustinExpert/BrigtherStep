@@ -5,3 +5,4 @@ legacy-react-ai
 .env
 .env.*
 *.log
+!.env.example

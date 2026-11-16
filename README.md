@@ -48,9 +48,22 @@ Passwords are stored only as salted PBKDF2 hashes.
 > accounts, permissions and data to a backend (e.g. Supabase with Row Level Security)
 > that enforces the same rules on the server.
 
+## Database (MongoDB Atlas) — in progress
+
+The app is moving from browser storage to MongoDB Atlas (free M0 cluster, Hong Kong) through a
+serverless API on Vercel (`api/`, region `hkg1`).
+
+1. Copy `.env.example` to `.env` and set `MONGODB_URI` (never commit `.env`).
+2. `npm run db:check` — tests the connection (never prints the password).
+3. `npm run db:seed` — loads the sample data into an empty database (`-- --reset` to start over).
+4. On Vercel, set the same `MONGODB_URI` and `MONGODB_DB` under Settings → Environment Variables.
+   `/api/health` shows whether the server can reach the database.
+
 ## Deploy
 
-**GitHub Pages (current):** every push to `main` builds and deploys via
+**Vercel (current):** https://brighterstep.vercel.app — every push to `main` redeploys.
+
+**GitHub Pages (old):** every push to `main` builds and deploys via
 `.github/workflows/deploy.yml`. Live at https://justinexpert.github.io/BrigtherStep/
 
 **Azure Static Web Apps (alternative):** App location `/`, Output location `dist`.
