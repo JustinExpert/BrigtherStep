@@ -22,9 +22,9 @@ export function ReportCardView({ student, showPrint = true }) {
     if (isCurrent) return;
     let live = true;
     setPast({ key: null, grades: [], error: "" });
-    yearGrades(yearKey).then((g) => live && setPast({ key: yearKey, grades: g, error: "" }), (e) => live && setPast({ key: yearKey, grades: [], error: e.message }));
+    yearGrades(yearKey, student.id).then((g) => live && setPast({ key: yearKey, grades: g, error: "" }), (e) => live && setPast({ key: yearKey, grades: [], error: e.message }));
     return () => { live = false; };
-  }, [yearKey, isCurrent, yearGrades]);
+  }, [yearKey, isCurrent, yearGrades, student.id]);
   const loading = !isCurrent && past.key !== yearKey;
   const year = years.find((y) => y.key === yearKey) || school.academicYear;
 

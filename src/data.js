@@ -2,6 +2,7 @@
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
 import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS } from "./constants.js";
+import { makePastYear } from "./samplePastYear.js";
 
 export { AVATAR_COLORS, CLASSES, STRANDS, SUBJECTS, TERMS };
 const school = structuredClone(DEFAULT_SCHOOL);
@@ -174,7 +175,12 @@ for (let d = new Date(`${DEFAULT_SCHOOL.academicYear.start}T12:00:00Z`); d.toISO
 // they're not real records, so they aren't stored. Real figures are calculated from grades and attendance.
 const studentRecords = students.map(({ marks, percent, attendance: _att, ...s }) => s);
 
-export const DATA = { students: studentRecords, teachers, notices, classes, subjects, routine, DAYS, PERIODS, assignments, grades, activities, attendance };
+// ---------- Last school year (2025–2026), already closed ----------
+const past = makePastYear({ students: studentRecords, assignments, classes, routine });
+school.pastYears = [past.year];
+const archives = [past.archive]; // year_archives: one snapshot per closed year
+
+export const DATA = { students: studentRecords, teachers, notices, classes, subjects, routine, DAYS, PERIODS, assignments, grades: [...grades, ...past.grades], activities, attendance, archives };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.

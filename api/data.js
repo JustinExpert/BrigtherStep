@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const params = new URL(req.url, "http://x").searchParams;
       if (params.get("backup")) return send(res, 200, { ok: true, backup: await exportBackup(user) });
-      if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year")) });
+      if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year"), params.get("student")) });
       if (params.get("view")) return send(res, 200, { ok: true, ...(await loadView(user, params)) });
       return send(res, 200, { ok: true, data: await bootstrap(user) });
     }
@@ -261,7 +261,7 @@ async function mutate(user, body) {
       if (user.role !== "superadmin") deny("Only the Super Admin can reset the demo data.");
       await replaceAll(db, {
         rows: Object.fromEntries(COLLECTIONS.map((c) => [c, c === "users" ? SEED.users : DATA[c]])),
-        attendance: DATA.attendance, school: SEED.school, permissions: DEFAULT_PERMISSIONS, routine: DATA.routine,
+        attendance: DATA.attendance, school: SEED.school, permissions: DEFAULT_PERMISSIONS, routine: DATA.routine, archives: DATA.archives,
       });
       return {};
 

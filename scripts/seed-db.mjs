@@ -49,6 +49,8 @@ try {
     return { _id: key, class: cls, date, marks, year: SEED.school.academicYear.key };
   });
   if (attendance.length) await db.collection("attendance").insertMany(attendance);
+  // Snapshot of the sample closed year (2025–2026); its grades are in DATA.grades.
+  await db.collection("year_archives").insertMany(DATA.archives.map(({ id, ...a }) => ({ _id: id, ...a })));
 
   // Indexes for the queries the app makes (and one unique rule: one account per email).
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
