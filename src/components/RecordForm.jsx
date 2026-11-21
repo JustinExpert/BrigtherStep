@@ -37,7 +37,7 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
               {f.options.map((o) => {
                 const val = optValue(o);
                 return (
-                  <label key={val} className="check">
+                  <label key={val} className="check-row">
                     <input type="checkbox" checked={v[f.key].includes(val)}
                       onChange={(e) => setV((s) => ({ ...s, [f.key]: e.target.checked ? [...s[f.key], val] : s[f.key].filter((x) => x !== val) }))} />
                     {typeof o === "object" ? o.label : o}
