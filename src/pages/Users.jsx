@@ -10,6 +10,7 @@ import DataTable from "../components/DataTable.jsx";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { PhotoPicker } from "./MyAccount.jsx";
+import Select from "../components/Select.jsx";
 
 const STATUS_CLS = { active: "b-green", pending: "b-amber", inactive: "b-red" };
 const tempPassword = () => "Bs-" + randomToken().replace(/[-_]/g, "").slice(0, 6) + Math.floor(Math.random() * 90 + 10);
@@ -60,32 +61,27 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
       <div className="form-grid">
         <label>Full name *<input className="input" required maxLength={80} value={f.name} onChange={set("name")} /></label>
         <label>Email *<input className="input" type="email" required value={f.email} onChange={set("email")} placeholder="name@brighterstep.test" /></label>
-        <label>Role<select className="select" value={f.role} onChange={set("role")}>{roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></label>
+        <label>Role<Select value={f.role} onChange={(v) => setF({ ...f, role: v })} aria-label="Role" options={roles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))} /></label>
         <label>ID number<input className="input" maxLength={20} value={f.idNumber} onChange={set("idNumber")} placeholder="e.g. TCH-203, STU-43105" /></label>
         <label>Phone<input className="input" type="tel" maxLength={30} value={f.phone} onChange={set("phone")} /></label>
 
         {f.role === "student" && (
           <label>Linked student record
-            <select className="select" value={f.studentId} onChange={(e) => setF({ ...f, studentId: e.target.value, idNumber: f.idNumber || e.target.value })}>
-              <option value="">— Not linked —</option>
-              {students.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.id} · Class {s.class})</option>)}
-            </select>
+            <Select value={f.studentId} onChange={(v) => setF({ ...f, studentId: v, idNumber: f.idNumber || v })} aria-label="Linked student record" searchable
+              options={[{ value: "", label: "— Not linked —" }, ...students.map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · Class ${s.class}` }))]} />
           </label>
         )}
         {f.role === "teacher" && (
           <label>Linked staff record
-            <select className="select" value={f.teacherId} onChange={(e) => setF({ ...f, teacherId: e.target.value, idNumber: f.idNumber || e.target.value })}>
-              <option value="">— Not linked —</option>
-              {teachers.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.id} · {t.subject})</option>)}
-            </select>
+            <Select value={f.teacherId} onChange={(v) => setF({ ...f, teacherId: v, idNumber: f.idNumber || v })} aria-label="Linked staff record" searchable
+              options={[{ value: "", label: "— Not linked —" }, ...teachers.map((t) => ({ value: t.id, label: t.name, hint: `${t.id} · ${t.subject}` }))]} />
           </label>
         )}
         {f.role === "parent" && (
           <label style={{ gridColumn: "1 / -1" }}>Children
-            <select className="select" value="" onChange={(e) => e.target.value && !f.childIds.includes(e.target.value) && setF({ ...f, childIds: [...f.childIds, e.target.value] })}>
-              <option value="">+ Add a child…</option>
-              {students.filter((s) => !f.childIds.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.id} · Class {s.class})</option>)}
-            </select>
+            <Select value="" placeholder="+ Add a child…" aria-label="Add a child" searchable
+              onChange={(v) => v && !f.childIds.includes(v) && setF({ ...f, childIds: [...f.childIds, v] })}
+              options={students.filter((s) => !f.childIds.includes(s.id)).map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · Class ${s.class}` }))} />
             <div className="chips">
               {f.childIds.length ? f.childIds.map((id) => (
                 <span className="chip" key={id}>{studentName(id)}

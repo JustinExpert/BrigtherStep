@@ -4,6 +4,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { CLASSES, SUBJECTS } from "../constants.js";
 import { PageHead, StatTile } from "../components/ui.jsx";
+import Select from "../components/Select.jsx";
 
 const NONE = "";
 
@@ -66,16 +67,13 @@ export default function Assignments() {
                     return (
                       <td key={cls} className={mine ? "mine" : ""}>
                         {canEdit ? (
-                          <select className={`select ${a ? "" : "missing"}`} value={a?.teacherId || NONE} aria-label={`Teacher for Class ${cls} ${subject}`}
-                            onChange={(e) => assign(cls, subject, e.target.value)}>
-                            <option value={NONE}>— Unassigned —</option>
-                            <optgroup label={`${subject} teachers`}>
-                              {teachers.filter((t) => t.subject === subject).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </optgroup>
-                            <optgroup label="Other teachers">
-                              {teachers.filter((t) => t.subject !== subject).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.subject})</option>)}
-                            </optgroup>
-                          </select>
+                          <Select className={a ? "" : "missing"} value={a?.teacherId || NONE} aria-label={`Teacher for Class ${cls} ${subject}`} searchable
+                            onChange={(v) => assign(cls, subject, v)}
+                            options={[
+                              { value: NONE, label: "— Unassigned —" },
+                              ...teachers.filter((t) => t.subject === subject).map((t) => ({ value: t.id, label: t.name, group: `${subject} teachers` })),
+                              ...teachers.filter((t) => t.subject !== subject).map((t) => ({ value: t.id, label: t.name, hint: t.subject, group: "Other teachers" })),
+                            ]} />
                         ) : <span>{a ? name(a.teacherId) : <span className="badge b-amber">Unassigned</span>}</span>}
                       </td>
                     );

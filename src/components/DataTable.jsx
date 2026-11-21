@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import Icon from "./Icon.jsx";
+import Select from "./Select.jsx";
 
 function pageList(cur, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i);
@@ -62,10 +63,8 @@ export default function DataTable({
             <Icon name="search" />
           </div>
           {filter && (
-            <select className="select" value={fv} aria-label={filter.label} onChange={(e) => { setFv(e.target.value); setPage(0); }}>
-              <option value="">{filter.label}</option>
-              {filter.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <Select value={fv} aria-label={filter.label} onChange={(v) => { setFv(v); setPage(0); }}
+              options={[{ value: "", label: filter.label }, ...filter.options]} />
           )}
           {tools}
         </div>
@@ -123,9 +122,8 @@ export default function DataTable({
           ? <span key={x} className="gap">•••</span>
           : <button key={x} className={x === p ? "on" : ""} onClick={() => setPage(x)}>{x + 1}</button>)}
         <button disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label="Next page"><Icon name="chevR" width="18" /></button>
-        <select className="select" value={per} onChange={(e) => { setPer(+e.target.value); setPage(0); }} aria-label="Rows per page">
-          {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
-        </select>
+        <Select value={per} aria-label="Rows per page" onChange={(v) => { setPer(v); setPage(0); }}
+          options={[5, 10, 20, 50].map((n) => ({ value: n, label: n + " / page" }))} />
       </div>
     </div>
   );

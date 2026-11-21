@@ -3,6 +3,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { isLocked, LEVEL_LABEL, LEVELS, levelOf, MODULES, ROLES } from "../lib/permissions.js";
 import { Badge, PageHead } from "../components/ui.jsx";
+import Select from "../components/Select.jsx";
 
 const LEVEL_CLS = { none: "b-red", view: "b-blue", edit: "b-green" };
 
@@ -52,10 +53,9 @@ export default function Roles() {
                       return (
                         <td key={r.key}>
                           {canEdit && !locked ? (
-                            <select className={`select level ${level}`} value={level} aria-label={`${m.label} access for ${r.label}`}
-                              onChange={(e) => { setPermission(m.key, r.key, e.target.value); toast(`${r.label}: ${m.label} → ${LEVEL_LABEL[e.target.value]}`); }}>
-                              {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
-                            </select>
+                            <Select className={`level ${level}`} value={level} aria-label={`${m.label} access for ${r.label}`}
+                              onChange={(v) => { setPermission(m.key, r.key, v); toast(`${r.label}: ${m.label} → ${LEVEL_LABEL[v]}`); }}
+                              options={LEVELS.map((l) => ({ value: l, label: LEVEL_LABEL[l] }))} />
                           ) : (
                             <span title={locked ? "Fixed so nobody can lock out the Super Admin or self-grant user management" : undefined}>
                               <Badge value={LEVEL_LABEL[level]} cls={LEVEL_CLS[level]} />{locked && " 🔒"}

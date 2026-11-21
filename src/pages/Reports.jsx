@@ -7,6 +7,8 @@ import { TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
+import Select from "../components/Select.jsx";
+import DateInput from "../components/DateInput.jsx";
 
 const TABS = [["attendance", "Attendance summary"], ["classlist", "Class list"], ["grades", "Class grades"]];
 const monthStart = () => todayIso().slice(0, 8) + "01";
@@ -109,28 +111,23 @@ export default function Reports() {
         </div>
         <div className="gb-pickers">
           <label>Class
-            <select className="select" value={cls} onChange={(e) => setCls(e.target.value)}>
-              {scope.classes.map((c) => <option key={c} value={c}>Class {c}</option>)}
-            </select>
+            <Select value={cls} onChange={setCls} aria-label="Class" options={scope.classes.map((c) => ({ value: c, label: "Class " + c }))} />
           </label>
           {tab === "attendance" && (
             <>
-              <label>From<input className="input" type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} /></label>
-              <label>To<input className="input" type="date" value={to} min={from} max={todayIso()} onChange={(e) => e.target.value && setTo(e.target.value)} /></label>
+              <label>From<DateInput value={from} max={to} required onChange={(v) => v && setFrom(v)} aria-label="From" /></label>
+              <label>To<DateInput value={to} min={from} max={todayIso()} required onChange={(v) => v && setTo(v)} aria-label="To" /></label>
             </>
           )}
           {tab === "grades" && years.length > 1 && (
             <label>School year
-              <select className="select" value={yearKey} onChange={(e) => setYearKey(e.target.value)}>
-                {years.map((y) => <option key={y.key} value={y.key}>{y.label}{y.key === school.academicYear.key ? " (current)" : ""}</option>)}
-              </select>
+              <Select value={yearKey} onChange={setYearKey} aria-label="School year"
+                options={years.map((y) => ({ value: y.key, label: y.label + (y.key === school.academicYear.key ? " (current)" : "") }))} />
             </label>
           )}
           {tab === "grades" && (
             <label>Grading period
-              <select className="select" value={term} onChange={(e) => setTerm(e.target.value)}>
-                {TERMS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-              </select>
+              <Select value={term} onChange={setTerm} aria-label="Grading period" options={TERMS.map((t) => ({ value: t.key, label: t.label }))} />
             </label>
           )}
         </div>

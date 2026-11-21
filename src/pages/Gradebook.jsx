@@ -10,6 +10,8 @@ import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
+import Select from "../components/Select.jsx";
+import DateInput from "../components/DateInput.jsx";
 
 const ORDER = Object.fromEntries(COMPONENTS.map((c, i) => [c.key, i]));
 const fmt = (n) => (n === null || n === undefined ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -32,12 +34,11 @@ function ActivityForm({ initial, onSave, onCancel, minMax = 1 }) {
       <div className="form-grid">
         <label style={{ gridColumn: "1 / -1" }}>Title *<input className="input" required maxLength={60} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Quiz 3, Science Project" /></label>
         <label>Component
-          <select className="select" value={f.component} onChange={(e) => setF({ ...f, component: e.target.value })}>
-            {COMPONENTS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
+          <Select value={f.component} onChange={(v) => setF({ ...f, component: v })} aria-label="Component"
+            options={COMPONENTS.map((c) => ({ value: c.key, label: c.label }))} />
         </label>
         <label>Highest possible score *<input className="input" type="number" min="1" max="1000" required value={f.maxScore} onChange={(e) => setF({ ...f, maxScore: e.target.value })} /></label>
-        <label>Date<input className="input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+        <label>Date<DateInput value={f.date} onChange={(v) => setF({ ...f, date: v })} aria-label="Activity date" /></label>
       </div>
       <p className="hint">{COMPONENTS.find((c) => c.key === f.component)?.hint}</p>
       <div className="form-actions">
@@ -196,9 +197,8 @@ export default function Gradebook() {
       <div className="card">
         <div className="gb-pickers">
           <label>Class &amp; subject
-            <select className="select" value={current.id} onChange={(e) => setPick(e.target.value)}>
-              {options.map((a) => <option key={a.id} value={a.id}>Class {a.class} · {a.subject}</option>)}
-            </select>
+            <Select value={current.id} onChange={setPick} aria-label="Class and subject"
+              options={options.map((a) => ({ value: a.id, label: "Class " + a.class + " · " + a.subject, group: "Class " + a.class }))} />
           </label>
           <div>
             <span className="gb-label">Grading period</span>

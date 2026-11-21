@@ -563,3 +563,85 @@ input[type="number"].input::-webkit-outer-spin-button, input[type="number"].inpu
 .year-chip svg { width: 16px; height: 16px; }
 a.year-chip:hover { background: #e9dcfb; }
 @media (max-width: 560px) { .year-chip span { display: none; } .year-chip { padding: 0 11px; } }
+
+/* =========================================================================
+   App-styled dropdown (Select.jsx) and calendar (DateInput.jsx)
+   ========================================================================= */
+.ss-trigger, .ds-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-width: 140px; max-width: 100%; text-align: left; cursor: pointer; font-family: inherit; line-height: 1.2;
+}
+.ss-trigger { background-image: none; padding-right: 12px; }
+.ss-trigger .ss-value, .ds-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ss-placeholder { color: #a6a3b3; }
+.ss-chevron, .ds-icon { width: 16px; height: 16px; flex: none; color: var(--primary); transition: transform .15s; }
+.ss-trigger.open .ss-chevron { transform: rotate(180deg); }
+.ss-trigger.open, .ds-trigger.open { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-100); background-color: #fff; }
+.ss-trigger:disabled, .ds-trigger:disabled { cursor: not-allowed; opacity: .7; }
+.form .ss-trigger, .form .ds-trigger, .form .ss-wrap { width: 100%; }
+.ss-wrap { position: relative; display: inline-block; max-width: 100%; }
+.ss-wrap > .ss-trigger, .ss-wrap > .ds-trigger { width: 100%; }
+/* Invisible twin input so the browser's "please fill in this field" bubble still works */
+.ss-native { position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+
+.ss-panel {
+  position: fixed; z-index: 90; display: flex; flex-direction: column; overflow: hidden;
+  background: #fff; border: 1px solid #e4e1ee; border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(53, 7, 154, .14), 0 2px 6px rgba(53, 7, 154, .06);
+  animation: ss-in .12s ease-out;
+}
+@keyframes ss-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.ss-search { position: relative; padding: 8px; border-bottom: 1px solid var(--line); flex: none; }
+.ss-search svg { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+.ss-search input { width: 100%; height: 36px; padding: 0 12px 0 34px; border: 1px solid #e4e1ee; border-radius: 8px; font: inherit; font-size: 14px; outline: none; }
+.ss-search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-100); }
+.ss-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; outline: none; flex: 1; }
+.ss-group { padding: 10px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ss-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--ink); }
+.ss-option .ss-label { display: flex; flex-direction: column; min-width: 0; }
+.ss-option small { color: var(--muted); font-size: 12px; }
+.ss-option.active { background: var(--primary-50); }
+.ss-option.selected { color: var(--primary); font-weight: 600; }
+.ss-option.disabled { opacity: .45; cursor: not-allowed; }
+.ss-check { width: 16px; height: 16px; flex: none; color: var(--primary); }
+.ss-empty { padding: 14px 10px; color: var(--muted); font-size: 13px; }
+
+/* Phones: lists and calendars slide up from the bottom */
+.ss-backdrop { position: fixed; inset: 0; z-index: 89; background: rgba(46, 44, 50, .35); }
+.ss-panel.sheet { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 75vh; border-radius: 18px 18px 0 0; animation: ss-up .18s ease-out; padding-bottom: env(safe-area-inset-bottom); }
+@keyframes ss-up { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+.ss-panel.sheet .ss-option { padding: 13px 12px; font-size: 15px; }
+
+/* Calendar */
+.ds-trigger { padding-right: 12px; }
+.ds-panel { width: 316px; padding: 12px; gap: 8px; }
+.ds-panel.sheet { width: auto; padding: 16px; }
+.ds-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ds-head .icon-btn svg { width: 18px; height: 18px; }
+.ds-head .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
+.ds-title { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; font: inherit; font-weight: 700; font-size: 15px; color: var(--ink); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.ds-title:hover, .ds-head .icon-btn:hover:not(:disabled) { background: var(--primary-50); }
+.ds-title svg { width: 14px; height: 14px; color: var(--primary); }
+.ds-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.ds-dow { text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; }
+.ds-day { aspect-ratio: 1; border: 0; background: none; border-radius: 9px; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.ds-day:hover:not(:disabled) { background: var(--primary-50); }
+.ds-day.other { color: #b8b4c6; }
+.ds-day.today { box-shadow: inset 0 0 0 1.5px var(--primary); font-weight: 600; }
+.ds-day.selected { background: var(--primary); color: #fff; font-weight: 600; }
+.ds-day:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.ds-day:disabled { color: #d4d1de; cursor: not-allowed; text-decoration: line-through; }
+.ds-years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ds-year { height: 42px; border: 0; border-radius: 9px; background: var(--bg); font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
+.ds-year:hover:not(:disabled) { background: var(--primary-50); }
+.ds-year.selected { background: var(--primary); color: #fff; font-weight: 600; }
+.ds-year:disabled { opacity: .35; cursor: not-allowed; }
+.ds-type input { width: 100%; height: 36px; padding: 0 12px; border: 1px solid #e4e1ee; border-radius: 8px; font: inherit; font-size: 13px; outline: none; }
+.ds-type input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-100); }
+.ds-error { display: block; margin-top: 4px; color: var(--red); font-size: 12px; }
+.ds-foot { display: flex; justify-content: space-between; align-items: center; }
+
+/* Compact variants used in tables (assignments, timetable, permissions) */
+.assign-table .ss-trigger, .slot-select.ss-trigger, .ss-trigger.level { height: 36px; padding: 0 8px 0 10px; font-size: 13px; }
+.ss-trigger.level { min-width: 110px; }
+@media (prefers-reduced-motion: reduce) { .ss-panel, .ss-panel.sheet { animation: none; } .ss-chevron { transition: none; } }

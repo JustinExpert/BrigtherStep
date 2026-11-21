@@ -8,6 +8,7 @@ import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
 import { attendanceLog, attendanceRate, MissingRecord } from "./StudentDashboard.jsx";
 import { useMyChildren } from "./ParentDashboard.jsx";
+import Select from "../components/Select.jsx";
 
 /** Printable report card built from published grades only. */
 export function ReportCardView({ student, showPrint = true }) {
@@ -45,9 +46,8 @@ export function ReportCardView({ student, showPrint = true }) {
         </div>
         <div className="print-hide" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {years.length > 1 && (
-            <select className="select" value={yearKey} onChange={(e) => setYearKey(e.target.value)} aria-label="School year">
-              {years.map((y) => <option key={y.key} value={y.key}>{y.label}{y.key === school.academicYear.key ? " (current)" : ""}</option>)}
-            </select>
+            <Select value={yearKey} onChange={setYearKey} aria-label="School year"
+              options={years.map((y) => ({ value: y.key, label: y.label + (y.key === school.academicYear.key ? " (current)" : "") }))} />
           )}
           {showPrint && <button className="btn light sm" onClick={() => window.print()}><Icon name="printer" />Print</button>}
         </div>

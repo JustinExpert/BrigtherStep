@@ -5,6 +5,8 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { todayIso } from "../lib/utils.js";
 import { Avatar, PageHead, StatTile } from "../components/ui.jsx";
+import Select from "../components/Select.jsx";
+import DateInput from "../components/DateInput.jsx";
 
 const OPTS = [["P", "Present"], ["A", "Absent"], ["L", "Late"]];
 
@@ -63,10 +65,10 @@ export default function Attendance() {
         <div className="card-head">
           <div><h3>Class {cls}</h3><p>{saved ? "Saved — you can still make changes." : "Not saved yet for this date."}</p></div>
           <div className="table-tools">
-            <select className="select" value={cls} onChange={(e) => setCls(e.target.value)} aria-label="Class">
-              {scope.classes.map((c) => <option key={c} value={c}>Class {c}{c === scope.homeroom ? " (homeroom)" : ""}</option>)}
-            </select>
-            <input className="input" type="date" value={date} min={ay.start} max={lastDay < ay.start ? ay.start : lastDay} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label={`Date (school year ${ay.label})`} title={`School year ${ay.label}: ${ay.start} to ${ay.end}`} />
+            <Select value={cls} onChange={setCls} aria-label="Class"
+              options={scope.classes.map((c) => ({ value: c, label: "Class " + c + (c === scope.homeroom ? " (homeroom)" : "") }))} />
+            <DateInput value={date} min={ay.start} max={lastDay < ay.start ? ay.start : lastDay} required onChange={(v) => v && setDate(v)}
+              aria-label="Attendance date" title={`School year ${ay.label}: ${ay.start} to ${ay.end}`} />
             <button className="btn sm light" onClick={() => setMarks(Object.fromEntries(list.map((s) => [s.id, "P"])))}>Mark all present</button>
           </div>
         </div>

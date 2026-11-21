@@ -7,6 +7,7 @@ import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
 import { CLASSES, GRADUATED, SUBJECTS } from "../constants.js";
 import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
+import DateInput from "../components/DateInput.jsx";
 
 /** Same day, one year later ("2026-08-17" → "2027-08-17"). */
 const nextYearDate = (iso) => `${Number(iso.slice(0, 4)) + 1}${iso.slice(4)}`;
@@ -46,8 +47,8 @@ function NewYearForm({ onDone, onCancel }) {
       {drafts > 0 && <div className="alert error" role="alert">{drafts} grade{drafts === 1 ? " is" : "s are"} still unpublished in {cur.label}. Publish them first, or they'll be locked as drafts that students and parents never see.</div>}
       <div className="form-grid three">
         <label>Label *<input className="input" required maxLength={20} value={f.label} onChange={set("label")} /></label>
-        <label>Starts *<input className="input" type="date" required value={f.start} onChange={set("start")} /></label>
-        <label>Ends *<input className="input" type="date" required value={f.end} onChange={set("end")} /></label>
+        <label>Starts *<DateInput required value={f.start} onChange={(v) => setF({ ...f, start: v })} aria-label="New year starts" /></label>
+        <label>Ends *<DateInput required value={f.end} min={f.start} onChange={(v) => setF({ ...f, end: v })} aria-label="New year ends" /></label>
       </div>
       <label className="check-row">
         <input type="checkbox" className="check" checked={f.promote} onChange={set("promote")} />
@@ -175,8 +176,8 @@ export default function SchoolSetup() {
           <div className="form">
             <div className="form-grid three">
               <label>Label *<input className="input" maxLength={20} value={s.academicYear.label} onChange={setYear("label")} /></label>
-              <label>Starts *<input className="input" type="date" value={s.academicYear.start} onChange={setYear("start")} /></label>
-              <label>Ends *<input className="input" type="date" value={s.academicYear.end} onChange={setYear("end")} /></label>
+              <label>Starts *<DateInput required value={s.academicYear.start} onChange={(v) => setS({ ...s, academicYear: { ...s.academicYear, start: v } })} aria-label="School year starts" /></label>
+              <label>Ends *<DateInput required value={s.academicYear.end} min={s.academicYear.start} onChange={(v) => setS({ ...s, academicYear: { ...s.academicYear, end: v } })} aria-label="School year ends" /></label>
             </div>
             {(s.pastYears || []).length > 0 && (
               <p className="hint">Closed school years: {[...s.pastYears].reverse().map((y) => y.label).join(", ")}</p>

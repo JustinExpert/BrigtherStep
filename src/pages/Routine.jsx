@@ -7,6 +7,7 @@ import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { findClash, teacherFor, teacherWeek } from "../lib/scope.js";
+import Select from "../components/Select.jsx";
 
 const MINE = "mine";
 
@@ -52,10 +53,8 @@ export default function Routine() {
     const subject = routine[view][di][pi].subject;
     if (editing) {
       return (
-        <select className="select slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${DATA.PERIODS[pi]} subject`} onChange={(e) => change(di, pi, e.target.value)}>
-          <option value="">Free period</option>
-          {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <Select className="slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${DATA.PERIODS[pi]} subject`} onChange={(v) => change(di, pi, v)}
+          options={[{ value: "", label: "Free period" }, ...SUBJECTS]} />
       );
     }
     if (!subject) return <div className="slot free"><small>Free</small></div>;

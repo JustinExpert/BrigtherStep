@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Select from "./Select.jsx";
+import DateInput from "./DateInput.jsx";
 
 /**
  * fields: [{ key, label, type?: text|email|tel|number|date|select|textarea, options?, required?, full? }]
@@ -26,9 +28,11 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
           <label key={f.key} style={f.full || f.type === "textarea" ? { gridColumn: "1 / -1" } : undefined}>
             {f.label}{f.required && " *"}
             {f.type === "select" ? (
-              <select className="select" value={v[f.key]} onChange={set(f.key)}>
-                {f.options.map((o) => <option key={optValue(o)} value={optValue(o)}>{typeof o === "object" ? o.label : o}</option>)}
-              </select>
+              <Select value={v[f.key]} options={f.options} required={f.required} aria-label={f.label}
+                onChange={(val) => setV((s) => ({ ...s, [f.key]: val }))} />
+            ) : f.type === "date" ? (
+              <DateInput value={v[f.key]} required={f.required} min={f.min} max={f.max} aria-label={f.label}
+                onChange={(val) => setV((s) => ({ ...s, [f.key]: val }))} />
             ) : f.type === "textarea" ? (
               <textarea value={v[f.key]} onChange={set(f.key)} required={f.required} maxLength={1000} />
             ) : (
