@@ -1,5 +1,5 @@
 // Simple list pages built on the generic CrudPage.
-import { CLASSES, SUBJECTS, AVATAR_COLORS } from "../data.js";
+import { CLASSES, SUBJECTS, AVATAR_COLORS } from "../constants.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { fmtDate } from "../lib/utils.js";

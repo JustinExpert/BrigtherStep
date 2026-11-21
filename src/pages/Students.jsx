@@ -3,7 +3,7 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
-import { CLASSES, AVATAR_COLORS } from "../data.js";
+import { CLASSES, AVATAR_COLORS } from "../constants.js";
 import { fmtDate } from "../lib/utils.js";
 import CrudPage from "../components/CrudPage.jsx";
 import RecordForm from "../components/RecordForm.jsx";

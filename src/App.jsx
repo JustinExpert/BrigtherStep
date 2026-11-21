@@ -1,37 +1,46 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { homeFor, useAuth } from "./lib/AuthContext.jsx";
 import { useData } from "./lib/DataContext.jsx";
 import { usePermission } from "./lib/usePermission.js";
 import { ADMINS, STAFF } from "./lib/permissions.js";
-import Layout from "./components/Layout.jsx";
+import Layout, { PageSkeleton } from "./components/Layout.jsx";
 import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
-import { ForgotPassword, ResetPassword } from "./pages/PasswordReset.jsx";
-import MyAccount from "./pages/MyAccount.jsx";
-import Users from "./pages/Users.jsx";
-import SchoolSetup from "./pages/SchoolSetup.jsx";
-import Roles from "./pages/Roles.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
-import TeacherDashboard from "./pages/TeacherDashboard.jsx";
-import StudentDashboard from "./pages/StudentDashboard.jsx";
-import ParentDashboard from "./pages/ParentDashboard.jsx";
-import Students, { AdmissionForm, StudentDetails } from "./pages/Students.jsx";
-import { Classes, Subjects, Teachers } from "./pages/Records.jsx";
-import Routine from "./pages/Routine.jsx";
-import Attendance from "./pages/Attendance.jsx";
-import Notice from "./pages/Notice.jsx";
-import Assignments from "./pages/Assignments.jsx";
-import Gradebook from "./pages/Gradebook.jsx";
-import ReportCard from "./pages/ReportCard.jsx";
-import Reports from "./pages/Reports.jsx";
-import Backup from "./pages/Backup.jsx";
+
+// Every page except Login is loaded the first time it's opened, so the first visit downloads less.
+const page = (load, name = "default") => lazy(() => load().then((m) => ({ default: m[name] })));
+const Register = page(() => import("./pages/Register.jsx"));
+const ForgotPassword = page(() => import("./pages/PasswordReset.jsx"), "ForgotPassword");
+const ResetPassword = page(() => import("./pages/PasswordReset.jsx"), "ResetPassword");
+const MyAccount = page(() => import("./pages/MyAccount.jsx"));
+const Users = page(() => import("./pages/Users.jsx"));
+const SchoolSetup = page(() => import("./pages/SchoolSetup.jsx"));
+const Roles = page(() => import("./pages/Roles.jsx"));
+const AdminDashboard = page(() => import("./pages/AdminDashboard.jsx"));
+const TeacherDashboard = page(() => import("./pages/TeacherDashboard.jsx"));
+const StudentDashboard = page(() => import("./pages/StudentDashboard.jsx"));
+const ParentDashboard = page(() => import("./pages/ParentDashboard.jsx"));
+const Students = page(() => import("./pages/Students.jsx"));
+const AdmissionForm = page(() => import("./pages/Students.jsx"), "AdmissionForm");
+const StudentDetails = page(() => import("./pages/Students.jsx"), "StudentDetails");
+const Classes = page(() => import("./pages/Records.jsx"), "Classes");
+const Subjects = page(() => import("./pages/Records.jsx"), "Subjects");
+const Teachers = page(() => import("./pages/Records.jsx"), "Teachers");
+const Routine = page(() => import("./pages/Routine.jsx"));
+const Attendance = page(() => import("./pages/Attendance.jsx"));
+const Notice = page(() => import("./pages/Notice.jsx"));
+const Assignments = page(() => import("./pages/Assignments.jsx"));
+const Gradebook = page(() => import("./pages/Gradebook.jsx"));
+const ReportCard = page(() => import("./pages/ReportCard.jsx"));
+const Reports = page(() => import("./pages/Reports.jsx"));
+const Backup = page(() => import("./pages/Backup.jsx"));
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
   const { user, checking } = useAuth();
   const { status, load } = useData();
   const location = useLocation();
-  if (checking) return <div role="status" style={{ padding: 32, color: "var(--muted)" }}>Loading…</div>;
+  if (checking) return <PageSkeleton full />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (status === "error") {
     return (
@@ -65,6 +74,7 @@ function MyProfile() {
 
 export default function App() {
   return (
+    <Suspense fallback={null}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -105,5 +115,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }

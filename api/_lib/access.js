@@ -75,58 +75,103 @@ export function teacherScope(user, assignments, teachers) {
 /** The request context: settings, permission check and (for teachers) scope. */
 export async function context(user) {
   const db = await getDb();
-  const settings = await loadSettings(db);
+  const isTeacher = user.role === "teacher";
+  const [settings, assignments, teachers] = await Promise.all([
+    loadSettings(db),
+    isTeacher ? db.collection("assignments").find({ teacherId: user.teacherId || "-" }).toArray() : [],
+    isTeacher ? db.collection("teachers").find({ _id: user.teacherId || "-" }, { projection: { class: 1 } }).toArray() : [],
+  ]);
   const can = (module, need = "view") => allows(settings.permissions, module, user.role, need);
-  let scope = { classes: new Set(), pairs: new Set() };
-  if (user.role === "teacher") {
-    const [assignments, teachers] = await Promise.all([
-      db.collection("assignments").find({ teacherId: user.teacherId || "-" }).toArray(),
-      db.collection("teachers").find({ _id: user.teacherId || "-" }).toArray(),
-    ]);
-    scope = teacherScope(user, assignments, teachers);
-  }
+  const scope = teacherScope(user, assignments, teachers);
   return { db, settings, can, scope, isAdmin: ADMINS.includes(user.role) };
 }
 
 const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replace(/^Class /, "") : null);
-const teacherCard = ({ id, name, subject, class: cls, gender, color, photo }) => ({ id, name, subject, class: cls, gender, color, photo });
 
-/** Everything this user may read, in the shape the app's data store uses. */
+const SECRET_FIELDS = { passwordHash: 0, salt: 0, resetTokenHash: 0, resetExpires: 0 };
+const TEACHER_CARD = { name: 1, subject: 1, class: 1, gender: 1, color: 1, photo: 1 };
+const audienceFilter = (classes) => ({ $or: [{ audience: { $in: [null, "", WHOLE_SCHOOL] } }, { audience: { $exists: false } }, { audience: { $in: [...classes].flatMap((c) => [`Class ${c}`, c]) } }] });
+/** class+subject pairs as a MongoDB filter (matches nothing when there are none). */
+const pairFilter = (pairs) => (pairs.size ? { $or: [...pairs].map((p) => { const [cls, subject] = p.split("|"); return { class: cls, subject }; }) } : { _id: null });
+
+/**
+ * Everything this user may read, in the shape the app's data store uses.
+ * Each role's filter runs inside MongoDB, so only the records that are sent are read.
+ */
 export async function bootstrap(user) {
+  await ensureIndexes();
   const ctx = await context(user);
   const { db, settings, can, scope, isAdmin } = ctx;
-  const all = Object.fromEntries(await Promise.all(COLLECTIONS.map(async (c) => [c, (await db.collection(c).find({}).toArray()).map(toClient)])));
-  const attendanceDocs = await db.collection("attendance").find({}).toArray();
-  const self = publicUser(await db.collection("users").findOne({ _id: user._id }));
-  const out = { classes: all.classes, subjects: all.subjects, assignments: all.assignments };
-  let attendance = {};
+  const find = async (col, filter = {}, projection) => (await db.collection(col).find(filter, projection && { projection }).toArray()).map(toClient);
+  const none = async () => [];
+  const self = publicUser(user);
+  let q; // collection → promise of rows
+  let attendanceFilter = null; // null = no attendance
+  let ownStudents = null; // students/parents: only these students' marks
 
   if (isAdmin || user.role === "teacher") {
-    const inClass = (cls) => isAdmin || scope.classes.has(cls);
-    out.students = can("students") ? all.students : [];
-    out.teachers = can("teachers") ? all.teachers : all.teachers.map(teacherCard);
-    out.grades = can("grades") ? all.grades.filter((g) => isAdmin || scope.pairs.has(`${g.class}|${g.subject}`) || scope.classes.has(g.class)) : [];
-    out.activities = can("grades") ? all.activities.filter((a) => isAdmin || scope.pairs.has(`${a.class}|${a.subject}`)) : [];
-    out.notices = all.notices.filter((n) => isAdmin || !audienceClass(n.audience) || inClass(audienceClass(n.audience)));
-    out.users = can("users") ? all.users.map(({ id, ...u }) => publicUser({ _id: id, ...u })) : [self];
-    if (can("attendance")) for (const d of attendanceDocs) if (inClass(d.class)) attendance[d._id] = d.marks;
+    const classes = [...scope.classes];
+    q = {
+      students: can("students") ? find("students") : none(),
+      teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
+      grades: !can("grades") ? none() : isAdmin ? find("grades") : find("grades", { class: { $in: classes } }), // taught classes + homeroom
+      activities: !can("grades") ? none() : isAdmin ? find("activities") : find("activities", pairFilter(scope.pairs)),
+      notices: isAdmin ? find("notices") : find("notices", audienceFilter(scope.classes)),
+      users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
+    };
+    if (can("attendance")) attendanceFilter = isAdmin ? {} : { class: { $in: classes } };
   } else {
     // Students and parents: only their own (or their children's) records.
-    const mine = new Set(user.role === "student" ? [user.studentId] : user.childIds || []);
-    out.students = all.students.filter((s) => mine.has(s.id));
-    const myClasses = new Set(out.students.map((s) => s.class));
-    out.teachers = all.teachers.map(teacherCard);
-    out.grades = all.grades.filter((g) => g.published && mine.has(g.studentId));
-    out.activities = [];
-    out.notices = all.notices.filter((n) => !audienceClass(n.audience) || myClasses.has(audienceClass(n.audience)));
-    out.users = [self];
-    for (const d of attendanceDocs) {
-      if (!myClasses.has(d.class)) continue;
-      const marks = Object.fromEntries(Object.entries(d.marks || {}).filter(([sid]) => mine.has(sid)));
-      if (Object.keys(marks).length) attendance[d._id] = marks;
-    }
+    ownStudents = user.role === "student" ? [user.studentId].filter(Boolean) : user.childIds || [];
+    const students = await find("students", { _id: { $in: ownStudents } });
+    const myClasses = new Set(students.map((s) => s.class));
+    q = {
+      students: Promise.resolve(students),
+      teachers: find("teachers", {}, TEACHER_CARD),
+      grades: find("grades", { studentId: { $in: ownStudents }, published: true }),
+      activities: none(),
+      notices: find("notices", audienceFilter(myClasses)),
+      users: Promise.resolve([self]),
+    };
+    attendanceFilter = { class: { $in: [...myClasses] } };
+  }
+
+  const [classes, subjects, assignments, attendanceDocs, ...rows] = await Promise.all([
+    find("classes"), find("subjects"), find("assignments"),
+    attendanceFilter ? db.collection("attendance").find(attendanceFilter).toArray() : [],
+    ...Object.values(q),
+  ]);
+  const out = { classes, subjects, assignments, ...Object.fromEntries(Object.keys(q).map((k, i) => [k, rows[i]])) };
+  if (out.users !== undefined && can("users")) out.users = out.users.map(({ id, ...u }) => publicUser({ _id: id, ...u }));
+
+  const attendance = {};
+  for (const d of attendanceDocs) {
+    if (!ownStudents) { attendance[d._id] = d.marks; continue; }
+    const marks = Object.fromEntries(Object.entries(d.marks || {}).filter(([sid]) => ownStudents.includes(sid)));
+    if (Object.keys(marks).length) attendance[d._id] = marks;
   }
   return { db: out, attendance, school: settings.school, permissions: settings.permissions, routine: settings.routine };
+}
+
+let indexesReady = null;
+/** Creates the indexes the role filters use (once per server instance; cheap no-op if they exist). */
+export function ensureIndexes() {
+  // Must match the definitions scripts/seed-db.mjs creates. A failure is logged, never fatal.
+  indexesReady ||= getDb().then((db) => Promise.allSettled([
+    db.collection("grades").createIndex({ studentId: 1, published: 1 }),
+    db.collection("grades").createIndex({ class: 1, subject: 1, term: 1 }),
+    db.collection("activities").createIndex({ class: 1, subject: 1, term: 1 }),
+    db.collection("attendance").createIndex({ class: 1, date: 1 }, { unique: true }),
+    db.collection("assignments").createIndex({ teacherId: 1 }),
+    db.collection("notices").createIndex({ audience: 1 }),
+    db.collection("users").createIndex({ email: 1 }, { unique: true }),
+    db.collection("users").createIndex({ resetTokenHash: 1 }, { sparse: true }),
+    db.collection("sessions").createIndex({ userId: 1 }),
+    db.collection("sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  ])).then((results) => {
+    for (const r of results) if (r.status === "rejected") console.error("[indexes]", r.reason?.message);
+  }, (e) => { indexesReady = null; console.error("[indexes]", e?.message); });
+  return indexesReady;
 }
 
 /** Checks that a teacher may change this grade/activity/attendance/notice record. Admins pass. */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Icon, { Logo } from "./Icon.jsx";
 import { Avatar, FEED_TONES } from "./ui.jsx";
@@ -202,8 +202,20 @@ export default function Layout() {
       {menuOpen && <div style={{ position: "fixed", inset: 0, zIndex: 45 }} onClick={() => setMenuOpen(false)} />}
       <div className="shell-main">
         <TopBar onMenu={() => setMenuOpen(true)} />
-        <main className="content"><Outlet /></main>
+        <main className="content"><Suspense fallback={<PageSkeleton />}><Outlet /></Suspense></main>
       </div>
     </div>
   );
+}
+
+/** Placeholder shapes while a page's code or the school data loads. `full` also covers the sidebar area. */
+export function PageSkeleton({ full = false }) {
+  const body = (
+    <div className="skeleton" role="status" aria-label="Loading">
+      <div className="sk sk-title" />
+      <div className="stat-grid">{[0, 1, 2, 3].map((i) => <div key={i} className="card sk sk-tile" />)}</div>
+      <div className="card sk sk-block" />
+    </div>
+  );
+  return full ? <div className="sk-full">{body}</div> : body;
 }

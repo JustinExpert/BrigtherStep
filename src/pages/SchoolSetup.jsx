@@ -5,7 +5,7 @@ import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
-import { SUBJECTS } from "../data.js";
+import { SUBJECTS } from "../constants.js";
 import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
 
 function validate(s) {

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { useData } from "./DataContext.jsx";
 import { ADMINS } from "./permissions.js";
-import { CLASSES, DATA, TERMS } from "../data.js";
+import { CLASSES, DATA, TERMS } from "../constants.js";
 
 export function useScope() {
   const { user } = useAuth();

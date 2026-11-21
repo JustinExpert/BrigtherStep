@@ -41,9 +41,12 @@ export async function links(db, role, { studentId, teacherId, childIds } = {}) {
     out.teacherId = teacherId;
   }
   if (role === "parent" && childIds) {
-    if (!Array.isArray(childIds) || childIds.length > 20) bad("Invalid list of children.");
-    for (const id of childIds) if (!(await exists("students", id))) bad(`No student record with ID ${id}. Check with the school office.`);
-    out.childIds = [...new Set(childIds)];
+    if (!Array.isArray(childIds) || childIds.length > 20 || childIds.some((id) => typeof id !== "string")) bad("Invalid list of children.");
+    const ids = [...new Set(childIds)];
+    const found = new Set((await db.collection("students").find({ _id: { $in: ids } }, { projection: { _id: 1 } }).toArray()).map((s) => s._id));
+    const missing = ids.find((id) => !found.has(id));
+    if (missing) bad(`No student record with ID ${missing}. Check with the school office.`);
+    out.childIds = ids;
   }
   return out;
 }

@@ -2,7 +2,7 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
-import { CLASSES, SUBJECTS } from "../data.js";
+import { CLASSES, SUBJECTS } from "../constants.js";
 import { PageHead, StatTile } from "../components/ui.jsx";
 
 const NONE = "";

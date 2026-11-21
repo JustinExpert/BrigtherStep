@@ -5,7 +5,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
 import { COMPONENTS, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
-import { TERMS } from "../data.js";
+import { TERMS } from "../constants.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";

@@ -76,8 +76,8 @@ export default postRoute(async (body, req) => {
       if (!ids.length || ids.length > 500) bad("Choose between 1 and 500 accounts.");
       const targets = await users.find({ _id: { $in: ids } }).toArray();
       targets.forEach(mayManage);
-      await users.deleteMany({ _id: { $in: targets.map((t) => t._id) } });
-      for (const t of targets) await endAllSessions(t._id);
+      const gone = targets.map((t) => t._id);
+      await Promise.all([users.deleteMany({ _id: { $in: gone } }), db.collection("sessions").deleteMany({ userId: { $in: gone } })]);
       return {};
     }
 

@@ -13,7 +13,9 @@ export default async function handler(req, res) {
       db.collection("teachers").estimatedDocumentCount(),
       db.collection("classes").estimatedDocumentCount(),
     ]);
-    return send(res, 200, { ok: true, school: { name: school.name, motto: school.motto }, counts: { students, teachers, classes } });
+    // Same for every visitor, so Vercel's edge may serve it for 60 s (browsers still revalidate).
+    return send(res, 200, { ok: true, school: { name: school.name, motto: school.motto }, counts: { students, teachers, classes } },
+      { "Vercel-CDN-Cache-Control": "s-maxage=60, stale-while-revalidate=300" });
   } catch {
     return send(res, 503, { ok: false, error: "The server is unavailable right now." });
   }

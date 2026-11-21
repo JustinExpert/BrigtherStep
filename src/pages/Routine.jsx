@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CLASSES, DATA, SUBJECTS } from "../data.js";
+import { CLASSES, DATA, SUBJECTS } from "../constants.js";
 import { PageHead } from "../components/ui.jsx";
 import Icon from "../components/Icon.jsx";
 import { useAuth } from "../lib/AuthContext.jsx";

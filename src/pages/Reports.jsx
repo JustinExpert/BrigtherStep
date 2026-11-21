@@ -3,7 +3,7 @@ import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { buildReport, termLabel, useScope } from "../lib/scope.js";
 import { downloadCsv, fmtDate, slug, todayIso } from "../lib/utils.js";
-import { TERMS } from "../data.js";
+import { TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";

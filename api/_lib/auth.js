@@ -127,9 +127,12 @@ export async function currentUser(req) {
   const claims = sessionClaims(req);
   if (!claims) return null;
   const db = await getDb();
-  const session = await db.collection("sessions").findOne({ _id: claims.sid, userId: claims.sub, expiresAt: { $gt: new Date() } });
-  if (!session) return null;
-  const user = await db.collection("users").findOne({ _id: claims.sub });
+  // One round trip: the live session joined with its account.
+  const [row] = await db.collection("sessions").aggregate([
+    { $match: { _id: claims.sid, userId: claims.sub, expiresAt: { $gt: new Date() } } },
+    { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
+  ]).toArray();
+  const user = row?.user?.[0];
   return user && user.status === "active" ? user : null; // deactivated accounts lose access at once
 }
 

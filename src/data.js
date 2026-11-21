@@ -1,6 +1,10 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
+import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, STRANDS, SUBJECTS, TERMS, attendanceChart } from "./constants.js";
+
+export { AVATAR_COLORS, CLASSES, STRANDS, SUBJECTS, TERMS };
+const school = structuredClone(DEFAULT_SCHOOL);
 let seed = 11;
 const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -11,10 +15,6 @@ const MALE = ["Liam", "Noah", "Ethan", "Lucas", "Arjun", "Kai", "Omar", "Mateo",
 const FEMALE = ["Ava", "Mia", "Zara", "Isla", "Sofia", "Leah", "Chloe", "Nina", "Ella", "Yuna", "Priya", "Maya", "Aria", "Lena", "Iris", "Eleanor", "Jenny", "Jane"];
 const LAST = ["Santos", "Patel", "Kim", "Okafor", "Nguyen", "Garcia", "Rossi", "Haddad", "Cruz", "Tanaka", "Brown", "Silva", "Ali", "Dubois", "Lopez", "Chen", "Novak", "Reyes", "Pena", "Wilson", "Cooper", "Miles"];
 const STREETS = ["TA-107 Newyork", "Australia, Sydney", "12 Rose St, Manila", "45 King Rd, London", "8 Elm Ave, Toronto", "22 Bay St, Auckland"];
-export const AVATAR_COLORS = ["#7b2cdf", "#ff7a3d", "#2f8cf0", "#2fb36c", "#e2456e", "#5327ae", "#f2a516"];
-
-export const CLASSES = ["01", "02", "03", "04", "05", "06"];
-export const SUBJECTS = ["Mathematics", "English", "Science", "History", "Geography", "Art", "Music", "Physical Ed.", "Computer"];
 
 const students = Array.from({ length: 64 }, (_, i) => {
   const gender = rnd() > 0.48 ? "Male" : "Female";
@@ -44,7 +44,6 @@ const students = Array.from({ length: 64 }, (_, i) => {
 // Roll numbers: unique within each class, in alphabetical order.
 CLASSES.forEach((c) => students.filter((s) => s.class === c).sort((a, b) => a.name.localeCompare(b.name)).forEach((s, i) => { s.roll = "#" + pad(i + 1); }));
 
-export const STRANDS = ["STEM", "ABM", "HUMSS", "GAS", "TVL"];
 
 const teachers = [
   ["Grace Okafor", "Female", "Mathematics"], ["Daniel Cruz", "Male", "Science"], ["Hannah Kim", "Female", "English"],
@@ -82,8 +81,6 @@ const subjects = SUBJECTS.map((s, i) => ({
   classes: "01–06",
 }));
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-const PERIODS = ["08:00", "08:50", "09:40", "10:50", "11:40", "12:30"];
 // Who teaches a subject in a class: subjects with two teachers are split, 01–03 → first, 04–06 → second.
 const teacherOf = (cls, subject) => {
   const options = teachers.filter((t) => t.subject === subject);
@@ -108,11 +105,6 @@ DAYS.forEach((_, d) => PERIODS.forEach((_, p) => {
   });
 }));
 
-const attendanceChart = {
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-  students: [88, 91, 86, 93, 95, 84, 0, 82, 94, 92, 90, 0],
-  teachers: [96, 97, 94, 98, 97, 93, 0, 91, 98, 97, 96, 0],
-};
 
 // ---------- Teaching assignments (who teaches which subject in which class) ----------
 // Subjects with two teachers are split: classes 01–03 get the first, 04–06 the second.
@@ -125,10 +117,6 @@ CLASSES.forEach((cls, ci) => {
 });
 
 // ---------- Grades (score 0–100 per student, subject and quarter) ----------
-export const TERMS = [
-  { key: "Q1", label: "1st Quarter" }, { key: "Q2", label: "2nd Quarter" },
-  { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
-];
 // Activities per class, subject and quarter, grouped into weighted components. The quarterly
 // grade is computed from them. Q1 and Q2 have scores; Q2 Mathematics in classes 01–03 is not
 // published yet so the demo teacher has grades to review and publish.
@@ -181,25 +169,5 @@ const users = [
   account("USR-9", "tomas.reyes@brighterstep.test", "Tomas Reyes", "parent", { status: "pending", createdAt: "2026-11-16", childIds: [students[2].id], note: "Self-registered" }),
 ];
 
-const school = {
-  name: "Northfield Academy",
-  motto: "Every day, a brighter step.",
-  address: "120 Learning Lane, Northfield",
-  phone: "+123 555 0100",
-  email: "office@brighterstep.test",
-  website: "https://brighterstep.test",
-  academicYear: { label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
-  passingMark: 60,
-  weights: structuredClone(DEFAULT_WEIGHTS), // grade component weights (%) per subject
-  transmutation: false, // apply the DepEd transmutation table to quarterly grades
-  strands: [...STRANDS],
-  grading: [
-    { grade: "A", min: 90, remark: "Outstanding" },
-    { grade: "B", min: 80, remark: "Very good" },
-    { grade: "C", min: 70, remark: "Good" },
-    { grade: "D", min: 60, remark: "Passed" },
-    { grade: "F", min: 0, remark: "Failed" },
-  ],
-};
 
 export const SEED = { users, school };

@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useData } from "../lib/DataContext.jsx";
-import { DATA } from "../data.js";
+import { DATA } from "../constants.js";
 import { compact, relTime } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import DataTable from "../components/DataTable.jsx";

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { buildReport } from "../lib/scope.js";
-import { TERMS } from "../data.js";
+import { TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";

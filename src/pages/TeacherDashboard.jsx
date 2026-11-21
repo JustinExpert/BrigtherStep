@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
-import { DATA } from "../data.js";
+import { DATA } from "../constants.js";
 import { teacherWeek, useScope, useVisibleNotices } from "../lib/scope.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";

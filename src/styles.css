@@ -544,3 +544,13 @@ input[type="number"].input::-webkit-outer-spin-button, input[type="number"].inpu
 .form .select, .table-tools .select, .gb-pickers .select { padding-right: 40px; }
 .form .input, .form .select { padding-top: 0; padding-bottom: 0; }
 .th-sub { display: block; font-size: 10px; font-weight: 500; color: var(--muted); text-transform: none; letter-spacing: 0; }
+
+/* Loading skeleton */
+.skeleton { display: flex; flex-direction: column; gap: 22px; }
+.sk { background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%); background-size: 200% 100%; animation: sk-shine 1.2s ease-in-out infinite; border-radius: 14px; }
+.sk-title { height: 28px; width: 240px; }
+.sk-tile { height: 96px; border: 0; }
+.sk-block { height: 320px; border: 0; }
+.sk-full { padding: 32px; min-height: 100vh; background: var(--bg); }
+@keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

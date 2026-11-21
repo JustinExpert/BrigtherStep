@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SEED } from "../data.js";
+import { DEFAULT_SCHOOL } from "../constants.js";
 import { DEFAULT_PERMISSIONS } from "./permissions.js";
 import { api, notify } from "./api.js";
 
@@ -11,7 +11,7 @@ const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS
 export const BACKUP_APP = "brighterstep";
 
 const emptyDb = () => Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
-const EMPTY = { db: emptyDb(), attendance: {}, school: structuredClone(SEED.school), permissions: structuredClone(DEFAULT_PERMISSIONS), routine: {} };
+const EMPTY = { db: emptyDb(), attendance: {}, school: structuredClone(DEFAULT_SCHOOL), permissions: structuredClone(DEFAULT_PERMISSIONS), routine: {} };
 
 const DataContext = createContext(null);
 
