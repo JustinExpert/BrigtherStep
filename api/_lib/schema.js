@@ -2,7 +2,7 @@
 // so wrong data (a grade of 150, a student without a name, a score for a student who doesn't exist)
 // never reaches the database. The rules match the app's forms.
 import { GRADUATED, TERMS } from "../../src/constants.js";
-import { gradeLabel, gradeOf, levelOf, offers, sectionLabel } from "../../src/levels.js";
+import { GRADES, gradeLabel, gradeOf, levelOf, offers, sectionLabel } from "../../src/levels.js";
 import { COMPONENTS } from "../../src/lib/gradeCalc.js";
 import { bad } from "./access.js";
 
@@ -69,7 +69,8 @@ const RULES = {
     code: req(text("Code", 20)),
     teacher: text("Teacher", 100, { ref: "teacherName" }),
     type: text("Type", 20, { oneOf: ["Theory", "Practical"] }),
-    grades: req(list("Grade levels", { oneOf: (ctx) => ctx.levels.flatMap((l) => levelOf(l).grades.map((g) => g.key)) })),
+    // Any known grade: a subject keeps grades of levels that are switched off (only sections of on levels can use it).
+    grades: req(list("Grade levels", { oneOf: GRADES.map((g) => g.key) })),
     strands: list("Strands", { oneOf: (ctx) => ctx.settings.school.strands || [] }),
   },
   notices: {

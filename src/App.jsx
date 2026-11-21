@@ -34,6 +34,7 @@ const Gradebook = page(() => import("./pages/Gradebook.jsx"));
 const ReportCard = page(() => import("./pages/ReportCard.jsx"));
 const Reports = page(() => import("./pages/Reports.jsx"));
 const Backup = page(() => import("./pages/Backup.jsx"));
+const Levels = page(() => import("./pages/Levels.jsx"));
 
 /** Redirects to /login when signed out. */
 function RequireAuth() {
@@ -89,6 +90,7 @@ export default function App() {
         <Route element={<RequireRole roles={STAFF} />}><Route path="/teacher" element={<TeacherDashboard />} /></Route>
         <Route element={<RequireRole roles={["parent"]} />}><Route path="/parent" element={<ParentDashboard />} /></Route>
         <Route element={<RequireRole roles={["student", "parent"]} />}><Route path="/report-card" element={<ReportCard />} /></Route>
+        <Route element={<RequireRole roles={["superadmin"]} />}><Route path="/levels" element={<Levels />} /></Route>
         <Route element={<RequireRole roles={["student"]} />}>
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/profile" element={<MyProfile />} />

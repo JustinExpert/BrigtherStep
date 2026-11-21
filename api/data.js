@@ -1,14 +1,15 @@
 // GET  /api/data            →  everything the signed-in user may read
 // GET  /api/data?backup=1   →  full backup file (Super Admin only)
 // POST /api/data { op, … }  →  one change, checked against the permission matrix and teacher scope
-import { currentUser } from "./_lib/auth.js";
+import crypto from "node:crypto";
+import { currentUser, lockSecondsLeft, recordFailure } from "./_lib/auth.js";
 import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, checkScope, checkYear, clean, context, deny, gradesForYear, loadSettings, toClient } from "./_lib/access.js";
 import { getClient } from "./_lib/db.js";
 import { loadView } from "./_lib/views.js";
 import { checkRecord, checkRefs, checkSchool, newRefs } from "./_lib/schema.js";
 import { enroll, rollSections, transferStudent } from "./_lib/sections.js";
 import { todayIso } from "../src/lib/utils.js";
-import { offers, sectionLabel } from "../src/levels.js";
+import { LEVEL_KEYS, levelOf, offers, sectionLabel } from "../src/levels.js";
 import { DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
@@ -219,6 +220,29 @@ async function mutate(user, body) {
         await session.endSession();
       }
       return { year: next.academicYear, promoted, graduated, sections };
+    }
+
+    case "levels": {
+      // Which levels this school may use. Only the vendor changes it: Super Admin account + the VENDOR_KEY code.
+      if (user.role !== "superadmin") deny("Only the Super Admin can open the Levels page.");
+      const key = process.env.VENDOR_KEY || "";
+      if (key.length < 16) bad("Level changes are switched off on this copy: no vendor code (VENDOR_KEY) is set up.");
+      const lockId = `vendor:${user._id}`;
+      const wait = await lockSecondsLeft(db, lockId);
+      if (wait) deny(`Too many wrong codes. Try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? "s" : ""}.`);
+      const got = crypto.createHash("sha256").update(String(body.code ?? "")).digest();
+      if (!crypto.timingSafeEqual(got, crypto.createHash("sha256").update(key).digest())) {
+        await recordFailure(db, lockId);
+        deny("That vendor code isn't right.");
+      }
+      await db.collection("login_attempts").deleteOne({ _id: lockId });
+      const list = Array.isArray(body.levels) ? body.levels : [];
+      if (list.some((k) => !levelOf(k))) bad("Unknown level.");
+      if (list.some((k) => !levelOf(k).available)) bad(`${list.map(levelOf).find((l) => !l.available).label} isn't available yet.`);
+      const levels = LEVEL_KEYS.filter((k) => list.includes(k));
+      if (!levels.length) bad("Turn on at least one level.");
+      await db.collection("settings").updateOne({ _id: "levels" }, { $set: { value: levels, by: user._id, at: new Date().toISOString() } }, { upsert: true });
+      return { levels };
     }
 
     case "transfer":

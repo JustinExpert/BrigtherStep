@@ -3,7 +3,7 @@
 // teacher's class scope (the same rules the app's menus and buttons follow).
 import { DATA, SEED } from "../../src/data.js";
 import { ADMINS, DEFAULT_PERMISSIONS, LEVELS, MODULES, ROLES, allows, isLocked } from "../../src/lib/permissions.js";
-import { parseEnabledLevels } from "../../src/levels.js";
+import { parseEnabledLevels, subjectLevels } from "../../src/levels.js";
 import { getDb } from "./db.js";
 import { publicUser } from "./auth.js";
 
@@ -60,8 +60,11 @@ export function checkId(col, id) {
   return id;
 }
 
-/** The levels this deployment may use (set by the vendor in ENABLED_LEVELS; unset = every available level). */
-export const enabledLevels = () => parseEnabledLevels(process.env.ENABLED_LEVELS);
+/**
+ * The levels this school may use. Set by the vendor on the Levels page (saved in settings, needs VENDOR_KEY);
+ * until that's been saved once, the ENABLED_LEVELS environment variable decides (unset = every available level).
+ */
+export const enabledLevels = (settings) => parseEnabledLevels(Array.isArray(settings?.levels) ? settings.levels.join(",") : process.env.ENABLED_LEVELS);
 
 /** School profile, permission matrix and timetable (with defaults filled in). */
 export async function loadSettings(db) {
@@ -69,7 +72,7 @@ export async function loadSettings(db) {
   const get = (id) => docs.find((d) => d._id === id)?.value;
   const saved = get("permissions") || {};
   const permissions = Object.fromEntries(MODULES.map((m) => [m.key, Object.fromEntries(ROLES.map((r) => [r.key, saved?.[m.key]?.[r.key] || DEFAULT_PERMISSIONS[m.key][r.key]]))]));
-  return { school: { ...structuredClone(SEED.school), ...(get("school") || {}) }, permissions, routine: get("routine") || structuredClone(DATA.routine) };
+  return { school: { ...structuredClone(SEED.school), ...(get("school") || {}) }, permissions, routine: get("routine") || structuredClone(DATA.routine), levels: get("levels") };
 }
 
 /**
@@ -99,16 +102,19 @@ export async function context(user) {
     db.collection("classes").find({}).toArray(),
     db.collection("subjects").find({}).toArray(), // the school's subject list (small)
   ]);
-  const levels = enabledLevels();
+  const levels = enabledLevels(settings);
   const year = currentYear(settings);
   // Sections of levels this school hasn't bought are invisible everywhere.
   const sections = new Map(sectionDocs.filter((s) => !s.level || levels.includes(s.level)).map((s) => [s._id, s]));
+  const hiddenSections = sectionDocs.filter((s) => !sections.has(s._id)).map((s) => s._id);
   const currentSections = new Set([...sections.values()].filter((s) => s.year === year).map((s) => s._id));
   const can = (module, need = "view") => allows(settings.permissions, module, user.role, need);
   const advised = isTeacher ? [...sections.values()].filter((s) => s.year === year && s.adviser === user.teacherId).map((s) => s._id) : [];
   const scope = teacherScope(user, assignments, advised);
-  const subjectByName = new Map(subjects.map((x) => [x.name, x]));
-  return { db, settings, levels, sections, currentSections, subjects, subjectByName, can, scope, isAdmin: ADMINS.includes(user.role) };
+  // Subjects of levels the school hasn't bought can't be used (names stay unique across all of them).
+  const visibleSubjects = subjects.filter((x) => subjectLevels(x).some((l) => levels.includes(l)));
+  const subjectByName = new Map(visibleSubjects.map((x) => [x.name, x]));
+  return { db, settings, levels, sections, hiddenSections, currentSections, subjects, visibleSubjects, subjectByName, can, scope, isAdmin: ADMINS.includes(user.role) };
 }
 
 const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replace(/^Class /, "") : null);
@@ -178,7 +184,8 @@ export async function bootstrap(user) {
     // Staff: grades, gradebook activities and attendance are the bulk of a school's data, so they
     // load per page (api/_lib/views.js: one class, one student, or dashboard totals), not here.
     q = {
-      students: can("students") ? find("students") : none(),
+      // Students in sections of levels the school hasn't bought stay on the server.
+      students: can("students") ? find("students", ctx.hiddenSections.length ? { class: { $nin: ctx.hiddenSections } } : {}) : none(),
       teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
       grades: none(),
       activities: none(),
@@ -208,8 +215,9 @@ export async function bootstrap(user) {
     attendanceFilter = { class: { $in: [...myClasses] }, year };
   }
 
-  const [subjects, assignments, attendanceDocs, ...rows] = await Promise.all([
-    find("subjects"), find("assignments"),
+  const subjects = ctx.visibleSubjects.map(toClient);
+  const [assignments, attendanceDocs, ...rows] = await Promise.all([
+    find("assignments"),
     attendanceFilter ? db.collection("attendance").find(attendanceFilter).toArray() : [],
     ...Object.values(q),
   ]);

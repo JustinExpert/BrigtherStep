@@ -31,6 +31,7 @@ export const NAV = [
     { to: "/users", label: "User Management", module: "users" },
     { to: "/roles", label: "Roles & Permissions", module: "roles" },
     { to: "/backup", label: "Backup & Restore", module: "school", need: "edit" },
+    { to: "/levels", label: "School Levels", roles: ["superadmin"] },
   ]},
   { label: "Students", icon: "cap", children: [
     { to: "/students", label: "All Students", module: "students" },

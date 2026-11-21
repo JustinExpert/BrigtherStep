@@ -67,7 +67,8 @@ try {
   const studentById = new Map(students.map((s) => [s._id, s]));
   const teacherIds = new Set(teachers.map((t) => t._id));
   // ---------- Sections (one school year, level and grade each) ----------
-  const levels = parseEnabledLevels(process.env.ENABLED_LEVELS);
+  const savedLevels = settings.find((s) => s._id === "levels")?.value;
+  const levels = parseEnabledLevels(Array.isArray(savedLevels) ? savedLevels.join(",") : process.env.ENABLED_LEVELS);
   const sections = await db.collection("classes").find({}).toArray();
   const sectionById = new Map(sections.map((s) => [s._id, s]));
   const validClass = (c) => sectionById.has(c);
@@ -76,7 +77,7 @@ try {
   for (const s of sections) {
     if (!knownYears.has(s.year)) problem("sections", "school year not in settings", `${s._id}: ${s.year}`);
     if (!levelOf(s.level)) problem("sections", "unknown level", `${s._id}: ${s.level}`);
-    else if (!levels.includes(s.level)) problem("sections", "level not enabled for this school (ENABLED_LEVELS)", `${s._id}: ${s.level}`);
+    else if (!levels.includes(s.level)) problem("sections", "level not enabled for this school (Levels page / ENABLED_LEVELS)", `${s._id}: ${s.level}`);
     if (gradeOf(s.grade)?.level !== s.level) problem("sections", "grade doesn't belong to its level", `${s._id}: ${s.grade}`);
     if (!s.name) problem("sections", "missing name", s._id);
     if (s.adviser && !teacherIds.has(s.adviser)) problem("sections", "adviser doesn't exist", `${s._id} → ${s.adviser}`);

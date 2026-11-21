@@ -54,7 +54,7 @@ export async function lockSecondsLeft(db, email) {
   return a?.lockedUntil && a.lockedUntil > new Date() ? Math.ceil((a.lockedUntil - new Date()) / 1000) : 0;
 }
 
-async function recordFailure(db, email) {
+export async function recordFailure(db, email) {
   const now = new Date();
   const doc = await db.collection("login_attempts").findOneAndUpdate(
     { _id: email },

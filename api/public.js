@@ -7,12 +7,13 @@ export default async function handler(req, res) {
   if (!allow(req, res, ["GET"])) return;
   try {
     const db = await getDb();
-    const { school } = await loadSettings(db);
+    const settings = await loadSettings(db);
+    const { school } = settings;
     const [students, teachers, classes] = await Promise.all([
       db.collection("students").estimatedDocumentCount(),
       db.collection("teachers").estimatedDocumentCount(),
       // This school year's sections, for the levels this school offers.
-      db.collection("classes").countDocuments({ year: school.academicYear?.key, level: { $in: enabledLevels() } }),
+      db.collection("classes").countDocuments({ year: school.academicYear?.key, level: { $in: enabledLevels(settings) } }),
     ]);
     // Same for every visitor, so Vercel's edge may serve it for 60 s (browsers still revalidate).
     return send(res, 200, { ok: true, school: { name: school.name, motto: school.motto }, counts: { students, teachers, classes } },

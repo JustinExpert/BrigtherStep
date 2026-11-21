@@ -157,6 +157,12 @@ export function DataProvider({ children }) {
       return r;
     },
     loadView,
+    /** Vendor only: which levels this school may use (needs the vendor code). Reloads on success. */
+    saveLevels: async (levels, code) => {
+      const r = await api("data", { op: "levels", levels, code });
+      await load();
+      return r;
+    },
     /** Moves a student to another section of this year ({ studentId, toClass, date, reason }); reloads on success. */
     transfer: async (t) => {
       const r = await api("data", { op: "transfer", ...t });
