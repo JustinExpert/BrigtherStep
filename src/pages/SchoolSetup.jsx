@@ -5,8 +5,62 @@ import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
-import { SUBJECTS } from "../constants.js";
+import { CLASSES, GRADUATED, SUBJECTS } from "../constants.js";
 import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
+
+/** Same day, one year later ("2026-08-17" → "2027-08-17"). */
+const nextYearDate = (iso) => `${Number(iso.slice(0, 4)) + 1}${iso.slice(4)}`;
+
+/** Closes the open school year and opens the next one, optionally moving every student up a class. */
+function NewYearForm({ onDone, onCancel }) {
+  const { school, grades, startNewYear } = useData();
+  const { toast } = useUI();
+  const cur = school.academicYear;
+  const [f, setF] = useState(() => {
+    const start = nextYearDate(cur.start), end = nextYearDate(cur.end);
+    return { label: `${start.slice(0, 4)}–${end.slice(0, 4)}`, start, end, promote: true };
+  });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const drafts = grades.filter((g) => !g.published).length;
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const r = await startNewYear(f);
+      toast(`School year ${f.label} started${f.promote ? ` · ${r.promoted} students moved up, ${r.graduated} graduated` : ""}`);
+      onDone(r.year);
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+
+  return (
+    <form className="form" onSubmit={submit}>
+      {error && <div className="alert error" role="alert">{error}</div>}
+      <p style={{ margin: 0 }}>
+        <b>{cur.label}</b> will be closed: its grades stay on report cards but can no longer be changed.
+        Gradebooks for the new year start empty.
+      </p>
+      {drafts > 0 && <div className="alert error" role="alert">{drafts} grade{drafts === 1 ? " is" : "s are"} still unpublished in {cur.label}. Publish them first, or they'll be locked as drafts that students and parents never see.</div>}
+      <div className="form-grid three">
+        <label>Label *<input className="input" required maxLength={20} value={f.label} onChange={set("label")} /></label>
+        <label>Starts *<input className="input" type="date" required value={f.start} onChange={set("start")} /></label>
+        <label>Ends *<input className="input" type="date" required value={f.end} onChange={set("end")} /></label>
+      </div>
+      <label className="check-row">
+        <input type="checkbox" className="check" checked={f.promote} onChange={set("promote")} />
+        <span>Move every student up one class (Class {CLASSES.at(-1)} students are marked {GRADUATED})</span>
+      </label>
+      <p className="hint">This can't be undone from the app. Download a backup first if you might need to go back.</p>
+      <div className="form-actions">
+        <button type="button" className="btn light" onClick={onCancel}>Cancel</button>
+        <button className="btn" disabled={busy}>{busy ? "Starting…" : `Start ${f.label || "new year"}`}</button>
+      </div>
+    </form>
+  );
+}
 
 function validate(s) {
   const errs = [];
@@ -35,7 +89,7 @@ function validate(s) {
 
 export default function SchoolSetup() {
   const { school, saveSchool } = useData();
-  const { toast } = useUI();
+  const { toast, openModal, closeModal } = useUI();
   const can = usePermission();
   const canEdit = can("school", "edit");
   const [s, setS] = useState(() => ({
@@ -108,13 +162,25 @@ export default function SchoolSetup() {
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Academic year</h3></div>
+          <div className="card-head">
+            <div><h3>School year</h3><p>Grades and gradebook activities belong to the open school year. Closed years stay readable on report cards but can't be changed.</p></div>
+            {canEdit && (
+              <button type="button" className="btn light sm" onClick={() => openModal("Start new school year", (
+                <NewYearForm onDone={(year) => { setS((cur) => ({ ...cur, academicYear: year, pastYears: [...(cur.pastYears || []), cur.academicYear] })); closeModal(); }} onCancel={closeModal} />
+              ))}>
+                <Icon name="calendar" />Start new school year
+              </button>
+            )}
+          </div>
           <div className="form">
             <div className="form-grid three">
               <label>Label *<input className="input" maxLength={20} value={s.academicYear.label} onChange={setYear("label")} /></label>
               <label>Starts *<input className="input" type="date" value={s.academicYear.start} onChange={setYear("start")} /></label>
               <label>Ends *<input className="input" type="date" value={s.academicYear.end} onChange={setYear("end")} /></label>
             </div>
+            {(s.pastYears || []).length > 0 && (
+              <p className="hint">Closed school years: {[...s.pastYears].reverse().map((y) => y.label).join(", ")}</p>
+            )}
           </div>
         </div>
 

@@ -21,6 +21,12 @@ export const TERMS = [
   { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
 ];
 
+/** A grade's id: one per school year, student, subject and quarter, so years never overwrite each other. */
+export const gradeId = (year, studentId, subject, term) => `${year}|${studentId}|${subject}|${term}`;
+
+/** Class name given to students who finished the top class (set by "Start new school year"). */
+export const GRADUATED = "Graduated";
+
 /** Display data the browser uses (kept as DATA so existing pages read DATA.DAYS etc.). */
 export const DATA = { DAYS, PERIODS, attendanceChart };
 
@@ -32,7 +38,9 @@ export const DEFAULT_SCHOOL = {
   phone: "+123 555 0100",
   email: "office@brighterstep.test",
   website: "https://brighterstep.test",
-  academicYear: { label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
+  // The open school year. `key` tags every grade and activity; it never changes once set.
+  academicYear: { key: "2026-2027", label: "2026–2027", start: "2026-08-17", end: "2027-06-11" },
+  pastYears: [], // closed school years, oldest first: [{ key, label, start, end }]
   passingMark: 60,
   weights: structuredClone(DEFAULT_WEIGHTS), // grade component weights (%) per subject
   transmutation: false, // apply the DepEd transmutation table to quarterly grades

@@ -5,7 +5,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
 import { COMPONENTS, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
-import { TERMS } from "../constants.js";
+import { TERMS, gradeId } from "../constants.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
@@ -86,7 +86,9 @@ export default function Gradebook() {
   }));
   const computed = Object.fromEntries(list.map((s) => [s.id, computeGrade(live, s.id, weights)]));
   const savedComputed = Object.fromEntries(list.map((s) => [s.id, computeGrade(acts, s.id, weights)]));
-  const rec = (sid) => grades.find((g) => g.id === `${sid}|${current.subject}|${term}`);
+  // Only the open school year's grades are loaded; every new grade and activity is tagged with it.
+  const year = school.academicYear.key;
+  const rec = (sid) => grades.find((g) => g.id === gradeId(year, sid, current.subject, term));
 
   const invalidCount = acts.reduce((n, act) => n + list.filter((s) => !isValid(act, s.id)).length, 0);
   const dirty = acts.some((act) => list.some((s) => typed(act, s.id) !== (act.scores?.[s.id] ?? "").toString()));
@@ -122,7 +124,7 @@ export default function Gradebook() {
       upsertMany("activities", merged());
       setEdits({});
       upsertMany("grades", graded.map((s) => ({
-        id: `${s.id}|${current.subject}|${term}`, studentId: s.id, class: current.class, subject: current.subject, term,
+        id: gradeId(year, s.id, current.subject, term), year, studentId: s.id, class: current.class, subject: current.subject, term,
         score: reportGrade(computed[s.id].grade, school), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
       })));
       const n = `${graded.length} grade${graded.length === 1 ? "" : "s"}`;
@@ -140,7 +142,7 @@ export default function Gradebook() {
 
   const addActivity = () => openModal("Add Activity", (
     <ActivityForm onCancel={closeModal} onSave={(v) => {
-      add("activities", { ...v, class: current.class, subject: current.subject, term, scores: {}, createdBy: user.teacherId || user.id });
+      add("activities", { ...v, class: current.class, subject: current.subject, term, year, scores: {}, createdBy: user.teacherId || user.id });
       closeModal();
       toast(`${v.title} added`);
     }} />
@@ -170,7 +172,7 @@ export default function Gradebook() {
     upsertMany("activities", [...prev.acts]
       .sort((a, b) => ORDER[a.component] - ORDER[b.component] || a.date.localeCompare(b.date))
       .map((a, i) => ({
-        id: `ACT-${stamp}-${i + 1}`, class: current.class, subject: current.subject, term,
+        id: `ACT-${stamp}-${i + 1}`, class: current.class, subject: current.subject, term, year,
         component: a.component, title: a.title, maxScore: a.maxScore, date: todayIso(), scores: {}, createdBy: user.teacherId || user.id,
       })));
     toast(`Copied ${prev.acts.length} activities from ${termLabel(prev.term)} — now enter the scores`);
@@ -178,7 +180,7 @@ export default function Gradebook() {
 
   return (
     <>
-      <PageHead title="Gradebook" crumbs={["Grades", "Gradebook"]}>
+      <PageHead title="Gradebook" crumbs={["Grades", `Gradebook · School year ${school.academicYear.label}`]}>
         {canEdit && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {isPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}

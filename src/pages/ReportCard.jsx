@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { buildReport } from "../lib/scope.js";
@@ -12,9 +12,25 @@ import { useMyChildren } from "./ParentDashboard.jsx";
 /** Printable report card built from published grades only. */
 export function ReportCardView({ student, showPrint = true }) {
   const data = useData();
-  const { school, classes, attendance } = data;
-  const { rows, average } = buildReport(student, data);
-  const section = classes.find((c) => c.name === "Class " + student.class)?.section;
+  const { school, classes, attendance, yearGrades } = data;
+  // The open year is already loaded; a past year's grades are fetched when chosen (read-only).
+  const years = [school.academicYear, ...[...(school.pastYears || [])].reverse()];
+  const [yearKey, setYearKey] = useState(school.academicYear.key);
+  const [past, setPast] = useState({ key: null, grades: [], error: "" });
+  const isCurrent = yearKey === school.academicYear.key;
+  useEffect(() => {
+    if (isCurrent) return;
+    let live = true;
+    setPast({ key: null, grades: [], error: "" });
+    yearGrades(yearKey).then((g) => live && setPast({ key: yearKey, grades: g, error: "" }), (e) => live && setPast({ key: yearKey, grades: [], error: e.message }));
+    return () => { live = false; };
+  }, [yearKey, isCurrent, yearGrades]);
+  const loading = !isCurrent && past.key !== yearKey;
+  const year = years.find((y) => y.key === yearKey) || school.academicYear;
+
+  const { rows, average, cls } = isCurrent ? buildReport(student, data) : buildReport(student, { ...data, grades: past.grades }, { past: true });
+  const shownClass = cls || student.class;
+  const section = classes.find((c) => c.name === "Class " + shownClass)?.section;
   const overall = average === null ? null : gradeFor(school, average);
   const log = attendanceLog(attendance, student);
   const count = (v) => log.filter((r) => r.status === v).length;
@@ -25,14 +41,23 @@ export function ReportCardView({ student, showPrint = true }) {
       <div className="rc-head">
         <div>
           <small>{school.name} · {school.address}</small>
-          <h2>Report Card · {school.academicYear.label}</h2>
+          <h2>Report Card · {year.label}</h2>
         </div>
-        {showPrint && <button className="btn light sm print-hide" onClick={() => window.print()}><Icon name="printer" />Print</button>}
+        <div className="print-hide" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {years.length > 1 && (
+            <select className="select" value={yearKey} onChange={(e) => setYearKey(e.target.value)} aria-label="School year">
+              {years.map((y) => <option key={y.key} value={y.key}>{y.label}{y.key === school.academicYear.key ? " (current)" : ""}</option>)}
+            </select>
+          )}
+          {showPrint && <button className="btn light sm" onClick={() => window.print()}><Icon name="printer" />Print</button>}
+        </div>
       </div>
       <div className="rc-student">
         <Avatar name={student.name} color={student.color} />
-        <div><b>{student.name}</b><small>{student.id} · Class {student.class}{section && `-${section}`} · Roll {student.roll}</small></div>
+        <div><b>{student.name}</b><small>{student.id} · Class {shownClass}{section && `-${section}`}{isCurrent && ` · Roll ${student.roll}`}</small></div>
       </div>
+      {loading && <p className="hint" role="status">Loading {year.label} grades…</p>}
+      {past.error && !isCurrent && <div className="alert error" role="alert">{past.error}</div>}
       <div className="table-wrap">
         <table className="rc-table">
           <thead>
@@ -68,7 +93,9 @@ export function ReportCardView({ student, showPrint = true }) {
       </div>
       <p className="hint" style={{ marginTop: 12 }}>
         Only published grades are shown; "—" means not graded or not published yet. Final = average of published quarters.
-        Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late (term average {student.attendance}%).
+        {isCurrent
+          ? <>Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late (term average {student.attendance}%).</>
+          : <>This is a closed school year, so these grades can no longer be changed. Teachers shown are the ones who entered the grades.</>}
       </p>
     </div>
   );

@@ -84,20 +84,27 @@ export const termLabel = (key) => TERMS.find((t) => t.key === key)?.label || key
 
 /**
  * Report for one student from published grades:
- * rows: [{ subject, teacher, terms: { Q1: 88, … }, final }], general average, attempted count.
+ * rows: [{ subject, teacher, terms: { Q1: 88, … }, final }], general average, and the class the grades were for.
+ * `past: true` is for a closed school year: the student may have been in another class then, so subjects,
+ * class and teachers come from the grades themselves instead of this year's teaching assignments.
  */
-export function buildReport(student, { grades, assignments, teachers }) {
+export function buildReport(student, { grades, assignments, teachers }, { past = false } = {}) {
   const mine = grades.filter((g) => g.studentId === student.id && g.published);
-  const subjects = assignments.filter((a) => a.class === student.class).map((a) => a.subject);
+  const subjects = past
+    ? [...new Set(mine.map((g) => g.subject))].sort()
+    : assignments.filter((a) => a.class === student.class).map((a) => a.subject);
+  const teacherName = (subject) => (past
+    ? teachers.find((t) => t.id === mine.find((g) => g.subject === subject)?.updatedBy)?.name || "—"
+    : teacherFor(assignments, teachers, student.class, subject));
   const rows = subjects.map((subject) => {
     const terms = Object.fromEntries(TERMS.map((t) => [t.key, mine.find((g) => g.subject === subject && g.term === t.key)?.score ?? null]));
     const scores = Object.values(terms).filter((v) => v !== null);
     return {
-      subject, teacher: teacherFor(assignments, teachers, student.class, subject), terms,
+      subject, teacher: teacherName(subject), terms,
       final: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
     };
   });
   const finals = rows.map((r) => r.final).filter((v) => v !== null);
   const average = finals.length ? Math.round((finals.reduce((a, b) => a + b, 0) / finals.length) * 10) / 10 : null;
-  return { rows, average };
+  return { rows, average, cls: past ? mine[0]?.class : student.class };
 }

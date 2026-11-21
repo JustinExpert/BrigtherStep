@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "db:check": "node scripts/check-db.mjs",
     "db:seed": "node scripts/seed-db.mjs",
-    "dev:api": "node scripts/api-dev.mjs"
+    "dev:api": "node scripts/api-dev.mjs",
+    "db:migrate-years": "node scripts/migrate-school-years.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",

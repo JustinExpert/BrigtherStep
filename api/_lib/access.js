@@ -48,7 +48,8 @@ export function clean(value, depth = 0) {
 export function checkId(col, id) {
   if (typeof id !== "string" || id.length > 80) bad("Invalid id.");
   // Ids are stored as plain string values (never as field names), so spaces and dots are fine.
-  if (col === "grades" ? !/^[A-Z0-9-]+\|[^|$]{1,60}\|[A-Z0-9]{1,6}$/i.test(id) : !(id.startsWith(PREFIX[col]) && id.length > PREFIX[col].length && /^[^$\u0000-\u001f]+$/.test(id))) bad("Invalid id.");
+  // Grade ids start with the school year: "2026-2027|STU-43100|Mathematics|Q1".
+  if (col === "grades" ? !/^\d{4}-\d{4}\|[A-Z0-9-]+\|[^|$]{1,60}\|[A-Z0-9]{1,6}$/i.test(id) : !(id.startsWith(PREFIX[col]) && id.length > PREFIX[col].length && /^[^$\u0000-\u001f]+$/.test(id))) bad("Invalid id.");
   return id;
 }
 
@@ -94,6 +95,35 @@ const audienceFilter = (classes) => ({ $or: [{ audience: { $in: [null, "", WHOLE
 /** class+subject pairs as a MongoDB filter (matches nothing when there are none). */
 const pairFilter = (pairs) => (pairs.size ? { $or: [...pairs].map((p) => { const [cls, subject] = p.split("|"); return { class: cls, subject }; }) } : { _id: null });
 
+/** The open school year's key, e.g. "2026-2027". */
+export const currentYear = (settings) => settings.school.academicYear?.key;
+export const ownStudentIds = (user) => (user.role === "student" ? [user.studentId].filter(Boolean) : user.childIds || []);
+
+/** Which grades this user may read, before the school-year filter (null = none). */
+function gradeFilter(ctx, user) {
+  if (ctx.isAdmin) return ctx.can("grades") ? {} : null;
+  if (user.role === "teacher") return ctx.can("grades") ? { class: { $in: [...ctx.scope.classes] } } : null; // taught classes + homeroom
+  return { studentId: { $in: ownStudentIds(user) }, published: true };
+}
+
+/** One school year's grades this user may read (used for report cards of past years). */
+export async function gradesForYear(user, year) {
+  if (typeof year !== "string" || !/^\d{4}-\d{4}$/.test(year)) bad("Invalid school year.");
+  const ctx = await context(user);
+  const filter = gradeFilter(ctx, user);
+  return filter ? (await ctx.db.collection("grades").find({ ...filter, year }).toArray()).map(toClient) : [];
+}
+
+/** Grades and activities can only be changed in the open school year; past years are read-only. */
+export function checkYear(ctx, col, rec) {
+  if (!rec || (col !== "grades" && col !== "activities")) return;
+  const year = currentYear(ctx.settings);
+  const id = String(rec._id ?? rec.id ?? "");
+  if (!year || rec.year !== year || (col === "grades" && !id.startsWith(year + "|"))) {
+    deny(`Past school years are read-only. Grades can only be changed for the current school year (${ctx.settings.school.academicYear?.label}).`);
+  }
+}
+
 /**
  * Everything this user may read, in the shape the app's data store uses.
  * Each role's filter runs inside MongoDB, so only the records that are sent are read.
@@ -105,6 +135,8 @@ export async function bootstrap(user) {
   const find = async (col, filter = {}, projection) => (await db.collection(col).find(filter, projection && { projection }).toArray()).map(toClient);
   const none = async () => [];
   const self = publicUser(user);
+  const year = currentYear(settings); // only the open school year's grades and activities load
+  const grades = () => { const f = gradeFilter(ctx, user); return f ? find("grades", { ...f, year }) : none(); };
   let q; // collection → promise of rows
   let attendanceFilter = null; // null = no attendance
   let ownStudents = null; // students/parents: only these students' marks
@@ -114,21 +146,21 @@ export async function bootstrap(user) {
     q = {
       students: can("students") ? find("students") : none(),
       teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
-      grades: !can("grades") ? none() : isAdmin ? find("grades") : find("grades", { class: { $in: classes } }), // taught classes + homeroom
-      activities: !can("grades") ? none() : isAdmin ? find("activities") : find("activities", pairFilter(scope.pairs)),
+      grades: grades(),
+      activities: !can("grades") ? none() : find("activities", { ...(isAdmin ? {} : pairFilter(scope.pairs)), year }),
       notices: isAdmin ? find("notices") : find("notices", audienceFilter(scope.classes)),
       users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
     };
     if (can("attendance")) attendanceFilter = isAdmin ? {} : { class: { $in: classes } };
   } else {
     // Students and parents: only their own (or their children's) records.
-    ownStudents = user.role === "student" ? [user.studentId].filter(Boolean) : user.childIds || [];
+    ownStudents = ownStudentIds(user);
     const students = await find("students", { _id: { $in: ownStudents } });
     const myClasses = new Set(students.map((s) => s.class));
     q = {
       students: Promise.resolve(students),
       teachers: find("teachers", {}, TEACHER_CARD),
-      grades: find("grades", { studentId: { $in: ownStudents }, published: true }),
+      grades: grades(),
       activities: none(),
       notices: find("notices", audienceFilter(myClasses)),
       users: Promise.resolve([self]),
@@ -158,9 +190,9 @@ let indexesReady = null;
 export function ensureIndexes() {
   // Must match the definitions scripts/seed-db.mjs creates. A failure is logged, never fatal.
   indexesReady ||= getDb().then((db) => Promise.allSettled([
-    db.collection("grades").createIndex({ studentId: 1, published: 1 }),
-    db.collection("grades").createIndex({ class: 1, subject: 1, term: 1 }),
-    db.collection("activities").createIndex({ class: 1, subject: 1, term: 1 }),
+    db.collection("grades").createIndex({ studentId: 1, year: 1, published: 1 }),
+    db.collection("grades").createIndex({ year: 1, class: 1, subject: 1, term: 1 }),
+    db.collection("activities").createIndex({ year: 1, class: 1, subject: 1, term: 1 }),
     db.collection("attendance").createIndex({ class: 1, date: 1 }, { unique: true }),
     db.collection("assignments").createIndex({ teacherId: 1 }),
     db.collection("notices").createIndex({ audience: 1 }),

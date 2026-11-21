@@ -554,3 +554,6 @@ input[type="number"].input::-webkit-outer-spin-button, input[type="number"].inpu
 .sk-full { padding: 32px; min-height: 100vh; background: var(--bg); }
 @keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+/* Checkbox with a label beside it */
+.check-row { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 500; }

@@ -2,13 +2,16 @@
 // GET  /api/data?backup=1   →  full backup file (Super Admin only)
 // POST /api/data { op, … }  →  one change, checked against the permission matrix and teacher scope
 import { currentUser } from "./_lib/auth.js";
-import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, checkScope, clean, context, deny, loadSettings, toClient } from "./_lib/access.js";
+import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, checkScope, checkYear, clean, context, deny, gradesForYear, loadSettings, toClient } from "./_lib/access.js";
+import { getClient } from "./_lib/db.js";
 import { CLASSES, DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
 
 const MAX_BATCH = 2000;
+const GRADUATED = "Graduated"; // class given to students who finish the top class
 const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
+const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o?.[k] !== undefined).map((k) => [k, o[k]]));
 const withId = (rows) => rows.map(({ id, ...rest }) => ({ _id: id, ...rest }));
 
 export default async function handler(req, res) {
@@ -18,7 +21,9 @@ export default async function handler(req, res) {
     if (!user) return send(res, 401, { ok: false, error: "Your session has ended. Please sign in again." });
 
     if (req.method === "GET") {
-      if (req.query?.backup ?? new URL(req.url, "http://x").searchParams.get("backup")) return send(res, 200, { ok: true, backup: await exportBackup(user) });
+      const params = new URL(req.url, "http://x").searchParams;
+      if (params.get("backup")) return send(res, 200, { ok: true, backup: await exportBackup(user) });
+      if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year")) });
       return send(res, 200, { ok: true, data: await bootstrap(user) });
     }
 
@@ -57,6 +62,7 @@ async function mutate(user, body) {
       delete item.id;
       if (body.col === "notices") Object.assign(item, { author: user.name, authorId: user._id });
       checkScope(ctx, user, body.col, item);
+      checkYear(ctx, body.col, { ...item, _id: id });
       try { await coll.insertOne({ _id: id, ...item }); } catch (e) { if (e?.code === 11000) bad("A record with this id already exists."); throw e; }
       return { record: toClient({ _id: id, ...item }) };
     }
@@ -72,6 +78,8 @@ async function mutate(user, body) {
       if (!existing) throw new HttpError(404, "That record no longer exists.");
       checkScope(ctx, user, body.col, existing);
       checkScope(ctx, user, body.col, { ...existing, ...patch });
+      checkYear(ctx, body.col, existing);
+      checkYear(ctx, body.col, { ...existing, ...patch });
       if (Object.keys(patch).length) await coll.updateOne({ _id: id }, { $set: patch });
       return {};
     }
@@ -83,6 +91,7 @@ async function mutate(user, body) {
       const existing = await coll.find({ _id: { $in: ids } }).toArray();
       for (const rec of existing) {
         checkScope(ctx, user, body.col, rec);
+        checkYear(ctx, body.col, rec);
         if (body.col === "notices" && !ctx.isAdmin && rec.authorId !== user._id && !(rec.authorId === undefined && rec.author === user.name)) deny("You can only delete your own announcements.");
       }
       await coll.deleteMany({ _id: { $in: existing.map((r) => r._id) } });
@@ -98,8 +107,10 @@ async function mutate(user, body) {
       const ops = items.map(({ id, ...rest }) => {
         const before = existing.get(id);
         checkScope(ctx, user, body.col, before);
+        checkYear(ctx, body.col, before);
         const after = { ...before, ...rest, _id: id };
         checkScope(ctx, user, body.col, after);
+        checkYear(ctx, body.col, after);
         return { replaceOne: { filter: { _id: id }, replacement: after, upsert: true } };
       });
       if (ops.length) await coll.bulkWrite(ops, { ordered: true });
@@ -122,8 +133,46 @@ async function mutate(user, body) {
       const patch = clean(body.patch);
       if (!isObj(patch)) bad("Invalid school settings.");
       const { school } = await loadSettings(db);
-      await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: { ...school, ...patch } } }, { upsert: true });
+      // The year's label and dates can be edited; its key and the list of past years change only via "newYear".
+      const y = isObj(patch.academicYear) ? patch.academicYear : {};
+      const academicYear = { ...school.academicYear, ...pick(y, ["label", "start", "end"]), key: school.academicYear.key };
+      await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: { ...school, ...patch, academicYear, pastYears: school.pastYears || [] } } }, { upsert: true });
       return {};
+    }
+
+    case "newYear": {
+      // Closes the open school year (its grades become read-only) and opens the next one.
+      needEdit("school");
+      const { school } = await loadSettings(db);
+      const cur = school.academicYear;
+      const { start, end } = body;
+      const label = typeof body.label === "string" ? body.label.trim() : "";
+      if (!label || label.length > 20) bad("Enter a label for the new school year (e.g. 2027–2028).");
+      if (![start, end].every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) || start >= end) bad("The new school year must end after it starts.");
+      if (start <= cur.start) bad(`The new school year must start after ${cur.label} started (${cur.start}).`);
+      const key = `${start.slice(0, 4)}-${end.slice(0, 4)}`;
+      if (key === cur.key || (school.pastYears || []).some((p) => p.key === key)) bad(`School year ${key} already exists.`);
+      const next = { ...school, academicYear: { key, label, start, end }, pastYears: [...(school.pastYears || []), pick(cur, ["key", "label", "start", "end"])] };
+
+      // One transaction: either the year changes *and* students move up, or nothing changes.
+      const session = (await getClient()).startSession();
+      let promoted = 0, graduated = 0;
+      try {
+        await session.withTransaction(async () => {
+          await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true, session });
+          if (body.promote === true) {
+            // Top class graduates first, then each class moves up from the top down, so nobody moves twice.
+            const ops = [{ updateMany: { filter: { class: CLASSES.at(-1) }, update: { $set: { class: GRADUATED, graduatedYear: cur.key } } } },
+              ...CLASSES.slice(0, -1).map((c, i) => ({ updateMany: { filter: { class: c }, update: { $set: { class: CLASSES[i + 1] } } } })).reverse()];
+            graduated = await db.collection("students").countDocuments({ class: CLASSES.at(-1) }, { session });
+            const r = await db.collection("students").bulkWrite(ops, { ordered: true, session });
+            promoted = r.modifiedCount - graduated;
+          }
+        });
+      } finally {
+        await session.endSession();
+      }
+      return { year: next.academicYear, promoted, graduated };
     }
 
     case "slot": {

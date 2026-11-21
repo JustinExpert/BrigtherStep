@@ -1,7 +1,7 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
-import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, STRANDS, SUBJECTS, TERMS, attendanceChart } from "./constants.js";
+import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS, attendanceChart } from "./constants.js";
 
 export { AVATAR_COLORS, CLASSES, STRANDS, SUBJECTS, TERMS };
 const school = structuredClone(DEFAULT_SCHOOL);
@@ -126,6 +126,7 @@ const TEMPLATES = [
 ];
 const DATES = { Q1: ["2026-09-04", "2026-09-18", "2026-09-25", "2026-10-02", "2026-10-09", "2026-10-21"],
   Q2: ["2026-10-30", "2026-11-06", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"] };
+const YEAR = DEFAULT_SCHOOL.academicYear.key; // sample grades belong to the first school year
 const activities = [];
 const grades = [];
 assignments.forEach((a) => {
@@ -133,7 +134,7 @@ assignments.forEach((a) => {
   const level = Object.fromEntries(pupils.map((s) => [s.id, s.percent + int(-10, 10)])); // ability in this subject
   ["Q1", "Q2"].forEach((term) => {
     const acts = TEMPLATES.map(([component, title, maxScore], i) => ({
-      id: `ACT-${a.class}-${a.subject.replace(/\W+/g, "")}-${term}-${i + 1}`, class: a.class, subject: a.subject, term,
+      id: `ACT-${a.class}-${a.subject.replace(/\W+/g, "")}-${term}-${i + 1}`, class: a.class, subject: a.subject, term, year: YEAR,
       component, title, maxScore, date: DATES[term][i], createdBy: a.teacherId,
       scores: Object.fromEntries(pupils.map((s) => [s.id, Math.round((maxScore * Math.max(40, Math.min(100, level[s.id] + int(-8, 8)))) / 100)])),
     }));
@@ -142,7 +143,7 @@ assignments.forEach((a) => {
     pupils.forEach((s) => {
       const { grade } = computeGrade(acts, s.id, DEFAULT_WEIGHTS[a.subject]);
       grades.push({
-        id: `${s.id}|${a.subject}|${term}`, studentId: s.id, class: s.class, subject: a.subject, term,
+        id: gradeId(YEAR, s.id, a.subject, term), year: YEAR, studentId: s.id, class: s.class, subject: a.subject, term,
         score: reportGrade(grade), published: !draft, updatedBy: a.teacherId, updatedAt: DATES[term][5],
       });
     });

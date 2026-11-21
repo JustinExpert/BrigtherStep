@@ -117,6 +117,17 @@ export function DataProvider({ children }) {
       await send("data", { op: "reset" });
       await load();
     },
+    /** Published grades of a past school year that this user may see (loaded on request, read-only). */
+    yearGrades: async (year) => (await api(`data?year=${encodeURIComponent(year)}`)).grades,
+    /**
+     * Closes the open school year and starts the next ({ label, start, end, promote }).
+     * Throws the server's message if it's refused. Resolves to { promoted, graduated }.
+     */
+    startNewYear: async (form) => {
+      const r = await api("data", { op: "newYear", ...form });
+      await load();
+      return r;
+    },
   }), [load, clear, send]);
 
   const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, status, publicInfo, ...actions }),
