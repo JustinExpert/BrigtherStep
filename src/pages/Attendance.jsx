@@ -9,12 +9,15 @@ import { Avatar, PageHead, StatTile } from "../components/ui.jsx";
 const OPTS = [["P", "Present"], ["A", "Absent"], ["L", "Late"]];
 
 export default function Attendance() {
-  const { students, attendance, saveAttendance } = useData();
+  const { students, attendance, school, saveAttendance } = useData();
   const { toast } = useUI();
   const canEdit = usePermission()("attendance", "edit");
   const scope = useScope(); // teachers only see the classes they teach
   const [cls, setCls] = useState(scope.homeroom || scope.classes[0] || "");
-  const [date, setDate] = useState(todayIso());
+  // Attendance can only be taken on days of the open school year, up to today.
+  const ay = school.academicYear;
+  const lastDay = todayIso() < ay.end ? todayIso() : ay.end;
+  const [date, setDate] = useState(() => (lastDay < ay.start ? ay.start : lastDay));
   const key = `${cls}|${date}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
   const [marks, setMarks] = useState({});
@@ -58,7 +61,7 @@ export default function Attendance() {
             <select className="select" value={cls} onChange={(e) => setCls(e.target.value)} aria-label="Class">
               {scope.classes.map((c) => <option key={c} value={c}>Class {c}{c === scope.homeroom ? " (homeroom)" : ""}</option>)}
             </select>
-            <input className="input" type="date" value={date} max={todayIso()} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Date" />
+            <input className="input" type="date" value={date} min={ay.start} max={lastDay < ay.start ? ay.start : lastDay} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label={`Date (school year ${ay.label})`} title={`School year ${ay.label}: ${ay.start} to ${ay.end}`} />
             <button className="btn sm light" onClick={() => setMarks(Object.fromEntries(list.map((s) => [s.id, "P"])))}>Mark all present</button>
           </div>
         </div>

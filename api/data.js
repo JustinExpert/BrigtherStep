@@ -60,7 +60,7 @@ async function mutate(user, body) {
       if (!isObj(item)) bad("Invalid record.");
       const id = checkId(body.col, item.id);
       delete item.id;
-      if (body.col === "notices") Object.assign(item, { author: user.name, authorId: user._id });
+      if (body.col === "notices") Object.assign(item, { author: user.name, authorId: user._id, year: ctx.settings.school.academicYear.key });
       checkScope(ctx, user, body.col, item);
       checkYear(ctx, body.col, { ...item, _id: id });
       try { await coll.insertOne({ _id: id, ...item }); } catch (e) { if (e?.code === 11000) bad("A record with this id already exists."); throw e; }
@@ -124,7 +124,10 @@ async function mutate(user, body) {
       if (!ctx.isAdmin && !ctx.scope.classes.has(cls)) deny("You can only take attendance for classes you teach.");
       const marks = clean(body.marks);
       if (!isObj(marks) || Object.entries(marks).some(([sid, v]) => !sid.startsWith("STU-") || !["P", "A", "L"].includes(v))) bad("Invalid attendance marks.");
-      await db.collection("attendance").updateOne({ _id: `${cls}|${date}` }, { $set: { class: cls, date, marks } }, { upsert: true });
+      // Attendance belongs to the open school year: only its dates can be recorded or changed.
+      const ay = ctx.settings.school.academicYear;
+      if (date < ay.start || date > ay.end) bad(`Attendance can only be recorded for dates in the current school year (${ay.start} to ${ay.end}).`);
+      await db.collection("attendance").updateOne({ _id: `${cls}|${date}` }, { $set: { class: cls, date, marks, year: ay.key } }, { upsert: true });
       return {};
     }
 
@@ -158,7 +161,18 @@ async function mutate(user, body) {
       const session = (await getClient()).startSession();
       let promoted = 0, graduated = 0;
       try {
+        // Snapshot of the closing year's setup, which changes once the new year starts:
+        // classes, teaching assignments, timetable and which class each student was in.
+        const [classes, assignments, enrolled] = await Promise.all([
+          db.collection("classes").find({}).toArray(), db.collection("assignments").find({}).toArray(),
+          db.collection("students").find({}, { projection: { class: 1 } }).toArray(),
+        ]);
+        const { routine } = await loadSettings(db);
         await session.withTransaction(async () => {
+          await db.collection("year_archives").replaceOne({ _id: cur.key }, {
+            _id: cur.key, label: cur.label, start: cur.start, end: cur.end, closedAt: new Date().toISOString(), closedBy: user._id,
+            classes, assignments, routine, enrollment: Object.fromEntries(enrolled.map((s) => [s._id, s.class])),
+          }, { upsert: true, session });
           await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true, session });
           if (body.promote === true) {
             // Top class graduates first, then each class moves up from the top down, so nobody moves twice.
@@ -210,14 +224,22 @@ async function mutate(user, body) {
       for (const c of COLLECTIONS) {
         const list = data.db[c];
         if (!Array.isArray(list)) bad(`The backup is missing ${c}.`);
-        rows[c] = list.map((r) => { const x = clean(r); checkId(c, x?.id); return x; });
+        rows[c] = list.map((r) => clean(r));
       }
+      // Backups made before school years existed: tag their records so they restore cleanly.
+      const school0 = isObj(data.school) ? data.school : SEED.school;
+      const backupYear = school0.academicYear?.key || `${String(school0.academicYear?.start || "").slice(0, 4)}-${String(school0.academicYear?.end || "").slice(0, 4)}`;
+      if (!/^\d{4}-\d{4}$/.test(backupYear)) bad("The backup's school year is missing or invalid.");
+      rows.grades = rows.grades.map((g) => (g.year ? g : { ...g, year: backupYear, id: `${backupYear}|${g.id}` }));
+      for (const c of ["activities", "notices"]) rows[c] = rows[c].map((r) => (r.year ? r : { ...r, year: backupYear }));
+      for (const c of COLLECTIONS) rows[c].forEach((x) => checkId(c, x?.id));
       if (!rows.users.some((u) => u.role === "superadmin" && u.status === "active" && u.passwordHash)) bad("The backup has no active Super Admin with a password, so restoring it would lock everyone out.");
       await replaceAll(db, {
         rows, attendance: isObj(data.attendance) ? clean(data.attendance) : {},
-        school: isObj(data.school) ? clean(data.school) : SEED.school,
+        school: (() => { const s = isObj(data.school) ? clean(data.school) : structuredClone(SEED.school); s.academicYear = { ...s.academicYear, key: backupYear }; s.pastYears ||= []; return s; })(),
         permissions: isObj(data.permissions) ? clean(data.permissions) : DEFAULT_PERMISSIONS,
         routine: isObj(data.routine) ? clean(data.routine) : DATA.routine,
+        archives: Array.isArray(data.archives) ? data.archives.map((a) => clean(a)) : [],
       });
       return {};
     }
@@ -236,16 +258,22 @@ async function mutate(user, body) {
 }
 
 /** Replaces all school data (used by restore and reset). Sessions are kept; removed accounts lose access on their next request. */
-async function replaceAll(db, { rows, attendance, school, permissions, routine }) {
+async function replaceAll(db, { rows, attendance, school, permissions, routine, archives = [] }) {
   for (const c of COLLECTIONS) {
     await db.collection(c).deleteMany({});
     if (rows[c].length) await db.collection(c).insertMany(withId(rows[c]), { ordered: true });
   }
+  // Each attendance day belongs to the school year whose dates contain it (else the open year).
+  const years = [school.academicYear, ...(school.pastYears || [])];
+  const yearOf = (date) => years.find((y) => y?.start && date >= y.start && date <= y.end)?.key || school.academicYear.key;
   await db.collection("attendance").deleteMany({});
   const att = Object.entries(attendance)
     .filter(([key, marks]) => isObj(marks) && /^[^|]+\|\d{4}-\d{2}-\d{2}$/.test(key))
-    .map(([key, marks]) => ({ _id: key, class: key.split("|")[0], date: key.split("|")[1], marks }));
+    .map(([key, marks]) => { const [cls, date] = key.split("|"); return { _id: key, class: cls, date, marks, year: yearOf(date) }; });
   if (att.length) await db.collection("attendance").insertMany(att);
+  await db.collection("year_archives").deleteMany({});
+  const arch = archives.filter((a) => isObj(a) && /^\d{4}-\d{4}$/.test(a.id || a._id || "")).map(({ id, ...a }) => ({ ...a, _id: a._id || id }));
+  if (arch.length) await db.collection("year_archives").insertMany(arch);
   for (const [id, value] of Object.entries({ school, permissions, routine })) {
     await db.collection("settings").updateOne({ _id: id }, { $set: { value } }, { upsert: true });
   }
@@ -258,6 +286,7 @@ async function exportBackup(user) {
   for (const c of COLLECTIONS) out[c] = (await db.collection(c).find({}).toArray()).map(toClient);
   const attendance = Object.fromEntries((await db.collection("attendance").find({}).toArray()).map((d) => [d._id, d.marks]));
   const { school, permissions, routine } = await loadSettings(db);
+  const archives = (await db.collection("year_archives").find({}).toArray()).map(toClient);
   // Includes password hashes so accounts keep working after a restore. Keep backup files private.
-  return { app: "brighterstep", version: 1, exportedAt: new Date().toISOString(), data: { db: out, attendance, school, permissions, routine } };
+  return { app: "brighterstep", version: 1, exportedAt: new Date().toISOString(), data: { db: out, attendance, school, permissions, routine, archives } };
 }

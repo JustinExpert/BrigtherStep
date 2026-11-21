@@ -24,7 +24,7 @@ export const STUDENT_FIELDS = [
 ];
 
 const newStudentDefaults = () => ({
-  marks: 0, percent: 0, attendance: 100, year: new Date().getFullYear(),
+  marks: 0, percent: 0, attendance: 100, admittedYear: new Date().getFullYear(),
   color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
 });
 

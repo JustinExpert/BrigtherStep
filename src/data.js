@@ -35,8 +35,8 @@ const students = Array.from({ length: 64 }, (_, i) => {
     marks,
     percent: Math.round((marks / 1200) * 100),
     attendance: int(78, 100),
-    _r: void pick([0, 0, 0, 0, 0]), // keeps the generated sample names the same as before
-    year: 2026,
+    // The pick() call only advances the random sequence so the sample names stay the same as before.
+    admittedYear: (pick([0, 0, 0, 0, 0]), 2026), // year the student joined (not the school year)
     color: pick(AVATAR_COLORS),
   };
 });
@@ -68,7 +68,7 @@ const notices = [
   { id: "N4", type: "event", title: "Science Fair", body: "The annual science fair will be held in the main hall on November 28.", date: "2026-11-06", author: "Daniel Cruz", audience: "Whole school" },
   { id: "N6", type: "event", title: "Class 02 Field Trip", body: "Class 02 visits the Science Museum on November 25. Bring the signed permission slip by Friday.", date: "2026-11-14", author: "Grace Okafor", audience: "Class 02" },
   { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. Check your class timetable for any changes.", date: "2026-11-02", author: "Exams Office", audience: "Whole school" },
-];
+].map((n) => ({ ...n, year: DEFAULT_SCHOOL.academicYear.key })); // posted in the first school year
 
 const classes = CLASSES.map((c, i) => ({
   id: "CLS-" + c, name: "Class " + c, section: pick(["A", "B"]), strand: { "05": "STEM", "06": "HUMSS" }[c] || "", teacher: teachers[i].name, room: "R-" + (101 + i), capacity: 40,

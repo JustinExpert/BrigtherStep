@@ -26,7 +26,7 @@ try {
     process.exit(0);
   }
   if (reset) {
-    for (const c of [...COLLECTIONS, "settings", "attendance"]) if (existing.includes(c)) await db.collection(c).drop();
+    for (const c of [...COLLECTIONS, "settings", "attendance", "year_archives"]) if (existing.includes(c)) await db.collection(c).drop();
     console.log("Removed the existing BrighterStep data.");
   }
 
@@ -51,6 +51,8 @@ try {
   await db.collection("grades").createIndex({ studentId: 1, year: 1, published: 1 });
   await db.collection("grades").createIndex({ year: 1, class: 1, subject: 1, term: 1 });
   await db.collection("activities").createIndex({ year: 1, class: 1, subject: 1, term: 1 });
+  await db.collection("attendance").createIndex({ year: 1, class: 1 });
+  await db.collection("notices").createIndex({ year: 1, audience: 1 });
   await db.collection("assignments").createIndex({ class: 1, subject: 1 }, { unique: true });
   await db.collection("assignments").createIndex({ teacherId: 1 });
 

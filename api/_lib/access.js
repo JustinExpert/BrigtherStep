@@ -36,7 +36,9 @@ export function clean(value, depth = 0) {
   if (isObj(value)) {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      if (k.startsWith("$") || k.includes(".") || k === "__proto__" || k === "constructor" || k === "prototype" || k.length > 100) bad("Invalid field name.");
+      // A dot in a top-level name would act as a nested path in an update ($set: { "a.b": … }), so it's refused there.
+      // Deeper down it's just data (e.g. grade weights for the subject "Physical Ed.").
+      if (k.startsWith("$") || (depth === 0 && k.includes(".")) || k === "__proto__" || k === "constructor" || k === "prototype" || k.length > 100) bad("Invalid field name.");
       if (v !== undefined) out[k] = clean(v, depth + 1);
     }
     return out;
@@ -135,7 +137,7 @@ export async function bootstrap(user) {
   const find = async (col, filter = {}, projection) => (await db.collection(col).find(filter, projection && { projection }).toArray()).map(toClient);
   const none = async () => [];
   const self = publicUser(user);
-  const year = currentYear(settings); // only the open school year's grades and activities load
+  const year = currentYear(settings); // only the open school year's grades, activities, attendance and announcements load
   const grades = () => { const f = gradeFilter(ctx, user); return f ? find("grades", { ...f, year }) : none(); };
   let q; // collection → promise of rows
   let attendanceFilter = null; // null = no attendance
@@ -148,10 +150,10 @@ export async function bootstrap(user) {
       teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
       grades: grades(),
       activities: !can("grades") ? none() : find("activities", { ...(isAdmin ? {} : pairFilter(scope.pairs)), year }),
-      notices: isAdmin ? find("notices") : find("notices", audienceFilter(scope.classes)),
+      notices: find("notices", { ...(isAdmin ? {} : audienceFilter(scope.classes)), year }),
       users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
     };
-    if (can("attendance")) attendanceFilter = isAdmin ? {} : { class: { $in: classes } };
+    if (can("attendance")) attendanceFilter = { ...(isAdmin ? {} : { class: { $in: classes } }), year };
   } else {
     // Students and parents: only their own (or their children's) records.
     ownStudents = ownStudentIds(user);
@@ -162,10 +164,10 @@ export async function bootstrap(user) {
       teachers: find("teachers", {}, TEACHER_CARD),
       grades: grades(),
       activities: none(),
-      notices: find("notices", audienceFilter(myClasses)),
+      notices: find("notices", { ...audienceFilter(myClasses), year }),
       users: Promise.resolve([self]),
     };
-    attendanceFilter = { class: { $in: [...myClasses] } };
+    attendanceFilter = { class: { $in: [...myClasses] }, year };
   }
 
   const [classes, subjects, assignments, attendanceDocs, ...rows] = await Promise.all([
@@ -195,7 +197,8 @@ export function ensureIndexes() {
     db.collection("activities").createIndex({ year: 1, class: 1, subject: 1, term: 1 }),
     db.collection("attendance").createIndex({ class: 1, date: 1 }, { unique: true }),
     db.collection("assignments").createIndex({ teacherId: 1 }),
-    db.collection("notices").createIndex({ audience: 1 }),
+    db.collection("attendance").createIndex({ year: 1, class: 1 }),
+    db.collection("notices").createIndex({ year: 1, audience: 1 }),
     db.collection("users").createIndex({ email: 1 }, { unique: true }),
     db.collection("users").createIndex({ resetTokenHash: 1 }, { sparse: true }),
     db.collection("sessions").createIndex({ userId: 1 }),

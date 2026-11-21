@@ -10,7 +10,8 @@
     "db:check": "node scripts/check-db.mjs",
     "db:seed": "node scripts/seed-db.mjs",
     "dev:api": "node scripts/api-dev.mjs",
-    "db:migrate-years": "node scripts/migrate-school-years.mjs"
+    "db:migrate-years": "node scripts/migrate-school-years.mjs",
+    "db:audit": "node scripts/audit-db.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",
