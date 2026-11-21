@@ -90,7 +90,7 @@ function useClickAway(onAway) {
 
 function TopBar({ onMenu }) {
   const { user, logout } = useAuth();
-  const { students, teachers, resetData } = useData();
+  const { students, teachers, school, resetData } = useData();
   const notices = useVisibleNotices(); // only announcements meant for this person
   const { toast, confirm } = useUI();
   const can = usePermission();
@@ -121,6 +121,12 @@ function TopBar({ onMenu }) {
         <Icon name="search" />
       </form>
       <div className="top-actions" ref={ref}>
+        {/* The open school year, on every page. Admins who manage school setup can click through to it. */}
+        {can("school") ? (
+          <Link to="/school-setup" className="year-chip" title="School year (open School Setup)"><Icon name="calendar" /><span>S.Y. {school.academicYear.label}</span></Link>
+        ) : (
+          <span className="year-chip" title="School year"><Icon name="calendar" /><span>S.Y. {school.academicYear.label}</span></span>
+        )}
         {can("notices") && (
           <div className="dropdown-wrap">
             <button className="round-btn" onClick={() => toggle("bell")} aria-label="Notifications"><Icon name="bell" />{!seen && <span className="dot" />}</button>

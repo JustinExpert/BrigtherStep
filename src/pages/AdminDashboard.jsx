@@ -75,7 +75,7 @@ export default function AdminDashboard() {
             { key: "id", label: "ID", render: (r) => r.id.replace("STU-", "PRE") },
             { key: "marks", label: "Marks" },
             { key: "percent", label: "Percent", render: (r) => r.percent + "%" },
-            { key: "year", label: "Year" },
+            { key: "year", label: "Admitted" }, // year the student joined, not the school year
           ]}
           actions={{ onView: (r) => navigate(`/students/${r.id}`) }}
         />

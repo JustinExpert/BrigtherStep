@@ -557,3 +557,9 @@ input[type="number"].input::-webkit-outer-spin-button, input[type="number"].inpu
 
 /* Checkbox with a label beside it */
 .check-row { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 500; }
+
+/* School year chip in the top bar */
+.year-chip { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 19px; background: #f3ecfd; color: var(--primary); font-size: 13px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.year-chip svg { width: 16px; height: 16px; }
+a.year-chip:hover { background: #e9dcfb; }
+@media (max-width: 560px) { .year-chip span { display: none; } .year-chip { padding: 0 11px; } }
