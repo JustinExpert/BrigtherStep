@@ -167,7 +167,7 @@ export default function Users() {
       <>
         <p style={{ marginTop: 0 }}>A reset link was emailed to <b>{u.email}</b>. It expires in 30 minutes.</p>
         <div className="demo-mail"><b>📬 Demo mailbox</b><p>There's no email server in this demo. The link the user would receive:</p>
-          <code style={{ wordBreak: "break-all", fontSize: 12 }}>{location.origin + location.pathname}#/reset-password/{token}</code></div>
+          <code style={{ wordBreak: "break-all", fontSize: 12 }}>{location.origin}/reset-password/{token}</code></div>
         <div className="form-actions"><button className="btn" onClick={closeModal}>Done</button></div>
       </>
     ));

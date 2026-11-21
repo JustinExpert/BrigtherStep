@@ -17,7 +17,7 @@ export function ForgotPassword() {
     setBusy(true);
     let token = null;
     try { token = await requestReset(email); } catch { /* same message either way */ }
-    setDemoLink(token ? `#/reset-password/${token}` : null);
+    setDemoLink(token ? `/reset-password/${token}` : null);
     setSent(true);
     setBusy(false);
   };
@@ -37,7 +37,7 @@ export function ForgotPassword() {
               <div className="demo-mail">
                 <b>📬 Demo mailbox</b>
                 <p>This demo has no email server, so the message is shown here instead.</p>
-                <a className="btn block" href={demoLink}>Open reset link</a>
+                <Link className="btn block" to={demoLink}>Open reset link</Link>
               </div>
             ) : (
               <p className="hint">Email isn't set up yet. If you don't get a link, ask the school admin to send you one from User Management.</p>
