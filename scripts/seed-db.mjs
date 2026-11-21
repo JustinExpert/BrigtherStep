@@ -63,6 +63,9 @@ try {
   await db.collection("notices").createIndex({ year: 1, audience: 1 });
   await db.collection("assignments").createIndex({ class: 1, subject: 1 }, { unique: true });
   await db.collection("assignments").createIndex({ teacherId: 1 });
+  await db.collection("classes").createIndex({ year: 1, level: 1, grade: 1 });
+  await db.collection("enrollments").createIndex({ studentId: 1, year: 1 });
+  await db.collection("enrollments").createIndex({ year: 1, class: 1 });
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0) + 3;
   console.log(`Loaded ${total} records into "${dbName}":`);

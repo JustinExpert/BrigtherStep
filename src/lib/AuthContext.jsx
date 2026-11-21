@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let live = true;
-    api("auth/me").then((d) => { if (live) { setServerUser(d.user); load(); } }, () => live && setServerUser(null));
+    api("auth/me").then((d) => { if (!live) return; setServerUser(d.user || null); if (d.user) load(); }, () => live && setServerUser(null));
     // A data request found the session gone (expired, signed out elsewhere, or deactivated).
     const ended = () => { setServerUser(null); clear(); };
     window.addEventListener("bs:signed-out", ended);

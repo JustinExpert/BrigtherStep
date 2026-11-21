@@ -15,7 +15,7 @@
   --amber: #c98a10;
   --amber-100: #fdf4e1;
   --ink: #2e2c32;
-  --muted: #798a99;
+  --muted: #5f6f7d; /* 5.2:1 on white (WCAG AA) */
   --line: #eeedf3;
   --bg: #f6f5fa;
   --card: #ffffff;

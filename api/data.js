@@ -117,7 +117,7 @@ async function mutate(user, body) {
         checkYear(ctx, body.col, rec);
         if (body.col === "notices" && !ctx.isAdmin && rec.authorId !== user._id && !(rec.authorId === undefined && rec.author === user.name)) deny("You can only delete your own announcements.");
         if (body.col === "classes") {
-          const used = await Promise.all([["students", { class: rec._id }], ["grades", { class: rec._id }], ["attendance", { class: rec._id }], ["enrollments", { class: rec._id }]]
+          const used = await Promise.all([["students", { class: rec._id }], ["grades", { year: rec.year, class: rec._id }], ["attendance", { class: rec._id }], ["enrollments", { year: rec.year, class: rec._id }]]
             .map(([c, q]) => db.collection(c).countDocuments(q, { limit: 1 })));
           if (used.some(Boolean)) bad(`${rec.name} still has students or records, so it can't be deleted.`);
         }

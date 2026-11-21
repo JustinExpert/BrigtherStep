@@ -245,6 +245,8 @@ export function ensureIndexes() {
     db.collection("activities").createIndex({ year: 1, class: 1, subject: 1, term: 1 }),
     db.collection("attendance").createIndex({ class: 1, date: 1 }, { unique: true }),
     db.collection("assignments").createIndex({ teacherId: 1 }),
+    db.collection("assignments").createIndex({ class: 1, subject: 1 }, { unique: true }),
+    db.collection("students").createIndex({ class: 1, roll: 1 }), // section lists, year-end moves, section delete checks
     db.collection("attendance").createIndex({ year: 1, class: 1 }),
     db.collection("notices").createIndex({ year: 1, audience: 1 }),
     db.collection("users").createIndex({ email: 1 }, { unique: true }),
