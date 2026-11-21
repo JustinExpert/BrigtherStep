@@ -3,7 +3,6 @@
 import { DEFAULT_WEIGHTS } from "./lib/gradeCalc.js";
 
 export const AVATAR_COLORS = ["#7b2cdf", "#ff7a3d", "#2f8cf0", "#2fb36c", "#e2456e", "#5327ae", "#f2a516"];
-export const CLASSES = ["01", "02", "03", "04", "05", "06"];
 export const SUBJECTS = ["Mathematics", "English", "Science", "History", "Geography", "Art", "Music", "Physical Ed.", "Computer"];
 export const STRANDS = ["STEM", "ABM", "HUMSS", "GAS", "TVL"];
 

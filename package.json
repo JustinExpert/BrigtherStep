@@ -12,7 +12,8 @@
     "dev:api": "node scripts/api-dev.mjs",
     "db:migrate-years": "node scripts/migrate-school-years.mjs",
     "db:audit": "node scripts/audit-db.mjs",
-    "db:add-past-year": "node scripts/add-past-year.mjs"
+    "db:add-past-year": "node scripts/add-past-year.mjs",
+    "db:migrate-sections": "node scripts/migrate-sections.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",

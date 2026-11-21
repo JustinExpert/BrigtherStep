@@ -1,15 +1,16 @@
 // Who may see and change what. The server is the authority: the browser only gets the records
 // a role may read, and every change is checked here against the permission matrix and the
 // teacher's class scope (the same rules the app's menus and buttons follow).
-import { CLASSES, DATA, SEED } from "../../src/data.js";
+import { DATA, SEED } from "../../src/data.js";
 import { ADMINS, DEFAULT_PERMISSIONS, LEVELS, MODULES, ROLES, allows, isLocked } from "../../src/lib/permissions.js";
+import { parseEnabledLevels } from "../../src/levels.js";
 import { getDb } from "./db.js";
 import { publicUser } from "./auth.js";
 
-export const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities"];
+export const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities", "enrollments"];
 /** Which permission module guards each collection (users have their own endpoint). */
 export const MODULE_OF = { students: "students", teachers: "teachers", notices: "notices", classes: "classes", subjects: "subjects", assignments: "assignments", grades: "grades", activities: "grades" };
-export const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "", activities: "ACT-" };
+export const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "", activities: "ACT-", enrollments: "ENR-" };
 export const WHOLE_SCHOOL = "Whole school";
 
 export class HttpError extends Error {
@@ -51,9 +52,16 @@ export function checkId(col, id) {
   if (typeof id !== "string" || id.length > 80) bad("Invalid id.");
   // Ids are stored as plain string values (never as field names), so spaces and dots are fine.
   // Grade ids start with the school year: "2026-2027|STU-43100|Mathematics|Q1".
-  if (col === "grades" ? !/^\d{4}-\d{4}\|[A-Z0-9-]+\|[^|$]{1,60}\|[A-Z0-9]{1,6}$/i.test(id) : !(id.startsWith(PREFIX[col]) && id.length > PREFIX[col].length && /^[^$\u0000-\u001f]+$/.test(id))) bad("Invalid id.");
+  if (col === "grades" ? !/^\d{4}-\d{4}\|[A-Z0-9-]+\|[^|$]{1,60}\|[A-Z0-9]{1,6}$/i.test(id) : !(id.startsWith(PREFIX[col]) && id.length > PREFIX[col].length && /^[^$\u0000-\u001f]+$/.test(id))) {
+    // Sections created before school levels existed kept their short ids ("01" … "06").
+    if (!(col === "classes" && /^\d{2}$/.test(id))) bad("Invalid id.");
+  }
+  if (col === "classes" && id.includes("|")) bad("Invalid id."); // "|" separates section and date in attendance keys
   return id;
 }
+
+/** The levels this deployment may use (set by the vendor in ENABLED_LEVELS; unset = every available level). */
+export const enabledLevels = () => parseEnabledLevels(process.env.ENABLED_LEVELS);
 
 /** School profile, permission matrix and timetable (with defaults filled in). */
 export async function loadSettings(db) {
@@ -64,35 +72,47 @@ export async function loadSettings(db) {
   return { school: { ...structuredClone(SEED.school), ...(get("school") || {}) }, permissions, routine: get("routine") || structuredClone(DATA.routine) };
 }
 
-/** A teacher's classes and class+subject pairs (assignments plus homeroom class). */
-export function teacherScope(user, assignments, teachers) {
-  if (user.role !== "teacher" || !user.teacherId) return { classes: new Set(), pairs: new Set() };
+/**
+ * A teacher's sections and section+subject pairs: what they teach (assignments) plus the
+ * sections they advise this school year.
+ */
+export function teacherScope(user, assignments, advised) {
+  if (user.role !== "teacher" || !user.teacherId) return { classes: new Set(), pairs: new Set(), advised: [] };
   const mine = assignments.filter((a) => a.teacherId === user.teacherId);
-  const homeroom = teachers.find((t) => (t._id ?? t.id) === user.teacherId)?.class;
   return {
-    classes: new Set([...mine.map((a) => a.class), ...(homeroom ? [homeroom] : [])]),
+    classes: new Set([...mine.map((a) => a.class), ...advised]),
     pairs: new Set(mine.map((a) => `${a.class}|${a.subject}`)),
+    advised,
   };
 }
 
-/** The request context: settings, permission check and (for teachers) scope. */
+/**
+ * The request context: settings, enabled levels, sections, permission check and (for teachers) scope.
+ * Sections are small (a few hundred per year), so they're all loaded once per request.
+ */
 export async function context(user) {
   const db = await getDb();
   const isTeacher = user.role === "teacher";
-  const [settings, assignments, teachers] = await Promise.all([
+  const [settings, assignments, sectionDocs] = await Promise.all([
     loadSettings(db),
     isTeacher ? db.collection("assignments").find({ teacherId: user.teacherId || "-" }).toArray() : [],
-    isTeacher ? db.collection("teachers").find({ _id: user.teacherId || "-" }, { projection: { class: 1 } }).toArray() : [],
+    db.collection("classes").find({}).toArray(),
   ]);
+  const levels = enabledLevels();
+  const year = currentYear(settings);
+  // Sections of levels this school hasn't bought are invisible everywhere.
+  const sections = new Map(sectionDocs.filter((s) => !s.level || levels.includes(s.level)).map((s) => [s._id, s]));
+  const currentSections = new Set([...sections.values()].filter((s) => s.year === year).map((s) => s._id));
   const can = (module, need = "view") => allows(settings.permissions, module, user.role, need);
-  const scope = teacherScope(user, assignments, teachers);
-  return { db, settings, can, scope, isAdmin: ADMINS.includes(user.role) };
+  const advised = isTeacher ? [...sections.values()].filter((s) => s.year === year && s.adviser === user.teacherId).map((s) => s._id) : [];
+  const scope = teacherScope(user, assignments, advised);
+  return { db, settings, levels, sections, currentSections, can, scope, isAdmin: ADMINS.includes(user.role) };
 }
 
 const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replace(/^Class /, "") : null);
 
 const SECRET_FIELDS = { passwordHash: 0, salt: 0, resetTokenHash: 0, resetExpires: 0 };
-const TEACHER_CARD = { name: 1, subject: 1, class: 1, gender: 1, color: 1, photo: 1 };
+const TEACHER_CARD = { name: 1, subject: 1, gender: 1, color: 1, photo: 1 };
 const audienceFilter = (classes) => ({ $or: [{ audience: { $in: [null, "", WHOLE_SCHOOL] } }, { audience: { $exists: false } }, { audience: { $in: [...classes].flatMap((c) => [`Class ${c}`, c]) } }] });
 
 /** The open school year's key, e.g. "2026-2027". */
@@ -110,8 +130,8 @@ export function gradeFilter(ctx, user) {
 export async function gradesForYear(user, year, studentId, cls) {
   if (typeof year !== "string" || !/^\d{4}-\d{4}$/.test(year)) bad("Invalid school year.");
   if (studentId !== null && studentId !== undefined && (typeof studentId !== "string" || !studentId.startsWith("STU-") || studentId.length > 40)) bad("Invalid student.");
-  if (cls !== null && cls !== undefined && !CLASSES.includes(cls)) bad("Invalid class.");
   const ctx = await context(user);
+  if (cls !== null && cls !== undefined && !ctx.sections.has(cls)) bad("Invalid class.");
   let filter = gradeFilter(ctx, user);
   // In a past year the student was in another class, so a teacher's access follows the students
   // in their classes *now* (not the classes they teach now, which held other students back then).
@@ -163,11 +183,17 @@ export async function bootstrap(user) {
       notices: find("notices", { ...(isAdmin ? {} : audienceFilter(scope.classes)), year }),
       users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
     };
+    // This year's enrolment history (who moved between sections, and when).
+    q.enrollments = can("students") ? find("enrollments", { year }) : none();
   } else {
     // Students and parents: only their own (or their children's) records.
     ownStudents = ownStudentIds(user);
-    const students = await find("students", { _id: { $in: ownStudents } });
-    const myClasses = new Set(students.map((s) => s.class));
+    const [students, enrollments] = await Promise.all([
+      find("students", { _id: { $in: ownStudents } }),
+      find("enrollments", { studentId: { $in: ownStudents }, year }),
+    ]);
+    // Every section they've been in this year (a transfer keeps the earlier section's attendance).
+    const myClasses = new Set([...students.map((s) => s.class), ...enrollments.map((e) => e.class)]);
     q = {
       students: Promise.resolve(students),
       teachers: find("teachers", {}, TEACHER_CARD),
@@ -175,15 +201,18 @@ export async function bootstrap(user) {
       activities: none(),
       notices: find("notices", { ...audienceFilter(myClasses), year }),
       users: Promise.resolve([self]),
+      enrollments: Promise.resolve(enrollments),
     };
     attendanceFilter = { class: { $in: [...myClasses] }, year };
   }
 
-  const [classes, subjects, assignments, attendanceDocs, ...rows] = await Promise.all([
-    find("classes"), find("subjects"), find("assignments"),
+  const [subjects, assignments, attendanceDocs, ...rows] = await Promise.all([
+    find("subjects"), find("assignments"),
     attendanceFilter ? db.collection("attendance").find(attendanceFilter).toArray() : [],
     ...Object.values(q),
   ]);
+  // Sections of every school year (small), for the levels this school offers.
+  const classes = [...ctx.sections.values()].map(toClient);
   const out = { classes, subjects, assignments, ...Object.fromEntries(Object.keys(q).map((k, i) => [k, rows[i]])) };
   if (out.users !== undefined && can("users")) out.users = out.users.map(({ id, ...u }) => publicUser({ _id: id, ...u }));
 
@@ -193,7 +222,7 @@ export async function bootstrap(user) {
     const marks = Object.fromEntries(Object.entries(d.marks || {}).filter(([sid]) => ownStudents.includes(sid)));
     if (Object.keys(marks).length) attendance[d._id] = marks;
   }
-  return { db: out, attendance, school: settings.school, permissions: settings.permissions, routine: settings.routine };
+  return { db: out, attendance, school: settings.school, permissions: settings.permissions, routine: settings.routine, levels: ctx.levels };
 }
 
 let indexesReady = null;
@@ -211,6 +240,9 @@ export function ensureIndexes() {
     db.collection("users").createIndex({ email: 1 }, { unique: true }),
     db.collection("users").createIndex({ resetTokenHash: 1 }, { sparse: true }),
     db.collection("sessions").createIndex({ userId: 1 }),
+    db.collection("classes").createIndex({ year: 1, level: 1, grade: 1 }),
+    db.collection("enrollments").createIndex({ studentId: 1, year: 1 }),
+    db.collection("enrollments").createIndex({ year: 1, class: 1 }),
     db.collection("sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ])).then((results) => {
     for (const r of results) if (r.status === "rejected") console.error("[indexes]", r.reason?.message);
@@ -230,4 +262,4 @@ export function checkScope(ctx, user, col, rec) {
   }
 }
 
-export const VALID = { CLASSES, LEVELS, MODULES, ROLES, isLocked };
+export const VALID = { LEVELS, MODULES, ROLES, isLocked };

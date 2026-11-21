@@ -27,6 +27,8 @@ try {
     const archive = await db.collection("year_archives").findOne({ _id: PAST_YEAR.key });
     if (!archive?.sample) throw new Error(`${PAST_YEAR.label} here wasn't added by this script, so it won't be removed.`);
     const g = await db.collection("grades").deleteMany({ year: PAST_YEAR.key });
+    await db.collection("classes").deleteMany({ year: PAST_YEAR.key, sample: true });
+    await db.collection("enrollments").deleteMany({ year: PAST_YEAR.key, sample: true });
     await db.collection("year_archives").deleteOne({ _id: PAST_YEAR.key });
     await settings.updateOne({ _id: "school" }, { $set: { "value.pastYears": pastYears.filter((y) => y.key !== PAST_YEAR.key) } });
     console.log(`Removed ${PAST_YEAR.label}: ${g.deletedCount} grades and its snapshot.`);
@@ -37,9 +39,12 @@ try {
   const [students, assignments, classes] = await Promise.all(["students", "assignments", "classes"].map((c) =>
     db.collection(c).find({}).toArray().then((rows) => rows.map(({ _id, ...r }) => ({ id: _id, ...r })))));
   const routine = (await settings.findOne({ _id: "routine" }))?.value || {};
-  const { grades, archive } = makePastYear({ students, assignments, classes, routine });
+  const { grades, archive, sections, enrollments } = makePastYear({ students, assignments, classes: classes.filter((c) => c.year === school.academicYear.key), routine });
 
-  if (grades.length) await db.collection("grades").insertMany(grades.map(({ id, ...g }) => ({ _id: id, ...g })), { ordered: false });
+  const withId = ({ id, ...r }) => ({ _id: id, ...r });
+  if (sections.length) await db.collection("classes").insertMany(sections.map(withId), { ordered: false });
+  if (grades.length) await db.collection("grades").insertMany(grades.map(withId), { ordered: false });
+  if (enrollments.length) await db.collection("enrollments").insertMany(enrollments.map(withId), { ordered: false });
   const { id, ...a } = archive;
   await db.collection("year_archives").replaceOne({ _id: id }, a, { upsert: true });
   const sorted = [...pastYears, PAST_YEAR].sort((x, y) => x.start.localeCompare(y.start)); // oldest first

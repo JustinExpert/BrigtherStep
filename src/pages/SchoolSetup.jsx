@@ -5,7 +5,7 @@ import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
-import { CLASSES, GRADUATED, SUBJECTS } from "../constants.js";
+import { GRADUATED, SUBJECTS } from "../constants.js";
 import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
 import DateInput from "../components/DateInput.jsx";
 
@@ -42,7 +42,7 @@ function NewYearForm({ onDone, onCancel }) {
       {error && <div className="alert error" role="alert">{error}</div>}
       <p style={{ margin: 0 }}>
         <b>{cur.label}</b> will be closed: its grades stay on report cards but can no longer be changed.
-        Gradebooks for the new year start empty.
+        Its sections, teaching assignments and timetable are copied to the new year, and gradebooks start empty.
       </p>
       {drafts > 0 && <div className="alert error" role="alert">{drafts} grade{drafts === 1 ? " is" : "s are"} still unpublished in {cur.label}. Publish them first, or they'll be locked as drafts that students and parents never see.</div>}
       <div className="form-grid three">
@@ -52,7 +52,7 @@ function NewYearForm({ onDone, onCancel }) {
       </div>
       <label className="check-row">
         <input type="checkbox" className="check" checked={f.promote} onChange={set("promote")} />
-        <span>Move every student up one class (Class {CLASSES.at(-1)} students are marked {GRADUATED})</span>
+        <span>Move every student up one grade, into the same-named section (students in the school's last grade are marked {GRADUATED})</span>
       </label>
       <p className="hint">This can't be undone from the app. Download a backup first if you might need to go back.</p>
       <div className="form-actions">

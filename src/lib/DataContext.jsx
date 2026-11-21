@@ -6,12 +6,12 @@ import { api, notify } from "./api.js";
 // School data lives on the server (MongoDB, via /api/data). After sign-in the app loads what the
 // user may see; each change updates the screen at once and is then saved by the server, which
 // checks permissions again. If the server refuses a change, the data is reloaded and the reason shown.
-const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities"];
-const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-", activities: "ACT-" };
+const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities", "enrollments"];
+const PREFIX = { students: "STU-", teachers: "TCH-", notices: "N", classes: "CLS-", subjects: "SUB-", users: "USR-", assignments: "ASG-", grades: "GRD-", activities: "ACT-", enrollments: "ENR-" };
 export const BACKUP_APP = "brighterstep";
 
 const emptyDb = () => Object.fromEntries(COLLECTIONS.map((c) => [c, []]));
-const EMPTY = { db: emptyDb(), attendance: {}, school: structuredClone(DEFAULT_SCHOOL), permissions: structuredClone(DEFAULT_PERMISSIONS), routine: {} };
+const EMPTY = { db: emptyDb(), attendance: {}, school: structuredClone(DEFAULT_SCHOOL), permissions: structuredClone(DEFAULT_PERMISSIONS), routine: {}, levels: [] };
 
 const DataContext = createContext(null);
 
@@ -34,7 +34,7 @@ export function DataProvider({ children }) {
     try {
       const { data } = await api("data");
       if (id !== loadId.current) return;
-      setState({ db: { ...emptyDb(), ...data.db }, attendance: data.attendance, school: data.school, permissions: data.permissions, routine: data.routine });
+      setState({ db: { ...emptyDb(), ...data.db }, attendance: data.attendance, school: data.school, permissions: data.permissions, routine: data.routine, levels: data.levels || [] });
       setEpoch((e) => e + 1);
       setStatus("ready");
     } catch {
@@ -157,9 +157,15 @@ export function DataProvider({ children }) {
       return r;
     },
     loadView,
+    /** Moves a student to another section of this year ({ studentId, toClass, date, reason }); reloads on success. */
+    transfer: async (t) => {
+      const r = await api("data", { op: "transfer", ...t });
+      await load();
+      return r;
+    },
   }), [load, clear, send, loadView]);
 
-  const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, status, publicInfo, epoch, ...actions }),
+  const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, levels: state.levels, status, publicInfo, epoch, ...actions }),
     [state, status, publicInfo, epoch, actions]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

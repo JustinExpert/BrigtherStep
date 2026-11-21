@@ -9,6 +9,7 @@ import { relTime, todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import RecordForm from "../components/RecordForm.jsx";
 import { Badge, FEED_TONES, PageHead } from "../components/ui.jsx";
+import { useSections } from "../lib/sections.js";
 
 const TYPES = ["general", "event", "exam", "course", "teacher"];
 const ALL = "All";
@@ -22,7 +23,10 @@ export default function Notice() {
   const { openModal, closeModal, confirm, toast } = useUI();
   const [filter, setFilter] = useState(ALL);
   // Teachers can post to the whole school or to the classes they teach; admins to any class.
-  const audiences = [WHOLE_SCHOOL, ...scope.classes.map((c) => `Class ${c}`)];
+  const sections = useSections();
+  const audName = (a) => (!a || a === WHOLE_SCHOOL ? WHOLE_SCHOOL : sections.label(a.replace(/^Class /, "")));
+  // Teachers post to the whole school or the sections they teach; admins to any section this year.
+  const audiences = [WHOLE_SCHOOL, ...scope.classes.map((c) => ({ value: c, label: sections.label(c), group: "A section" }))];
   const filters = [ALL, ...new Set([WHOLE_SCHOOL, ...notices.map((n) => n.audience || WHOLE_SCHOOL)])];
   const shown = filter === ALL ? notices : notices.filter((n) => (n.audience || WHOLE_SCHOOL) === filter);
 
@@ -38,7 +42,7 @@ export default function Notice() {
       onSubmit={(v) => {
         add("notices", { ...v, date: todayIso(), author: user.name });
         closeModal();
-        toast(v.audience === WHOLE_SCHOOL ? "Announcement posted to the whole school" : `Announcement posted to ${v.audience}`);
+        toast(v.audience === WHOLE_SCHOOL ? "Announcement posted to the whole school" : `Announcement posted to ${audName(v.audience)}`);
       }}
     />
   ));
@@ -50,7 +54,7 @@ export default function Notice() {
       </PageHead>
       {filters.length > 2 && (
         <div className="tabs" role="tablist" aria-label="Filter announcements" style={{ alignSelf: "flex-start" }}>
-          {filters.map((f) => <button key={f} role="tab" aria-selected={f === filter} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{f}</button>)}
+          {filters.map((f) => <button key={f} role="tab" aria-selected={f === filter} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{f === ALL ? ALL : audName(f)}</button>)}
         </div>
       )}
       <div className="notice-grid">
@@ -70,7 +74,7 @@ export default function Notice() {
                   </button>
                 )}
               </div>
-              <div><Badge value={aud} cls={aud === WHOLE_SCHOOL ? "b-blue" : "b-purple"} /></div>
+              <div><Badge value={audName(aud)} cls={aud === WHOLE_SCHOOL ? "b-blue" : "b-purple"} /></div>
               <p>{n.body}</p>
               <footer><span>By {n.author}</span><time dateTime={n.date}>{relTime(n.date)}</time></footer>
             </article>

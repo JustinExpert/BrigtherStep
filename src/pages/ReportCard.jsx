@@ -9,6 +9,7 @@ import { gradeFor } from "./SchoolSetup.jsx";
 import { attendanceLog, attendanceRate, MissingRecord } from "./StudentDashboard.jsx";
 import { useMyChildren } from "./ParentDashboard.jsx";
 import Select from "../components/Select.jsx";
+import { useSections } from "../lib/sections.js";
 
 /** Printable report card built from published grades only. */
 export function ReportCardView({ student, showPrint = true }) {
@@ -31,7 +32,8 @@ export function ReportCardView({ student, showPrint = true }) {
 
   const { rows, average, cls } = isCurrent ? buildReport(student, data) : buildReport(student, { ...data, grades: past.grades }, { past: true });
   const shownClass = cls || student.class;
-  const section = classes.find((c) => c.name === "Class " + shownClass)?.section;
+  const sections = useSections();
+  const shownSection = sections.byId.get(shownClass);
   const overall = average === null ? null : gradeFor(school, average);
   const log = attendanceLog(attendance, student);
   const count = (v) => log.filter((r) => r.status === v).length;
@@ -54,7 +56,7 @@ export function ReportCardView({ student, showPrint = true }) {
       </div>
       <div className="rc-student">
         <Avatar name={student.name} color={student.color} />
-        <div><b>{student.name}</b><small>{student.id} · Class {shownClass}{section && `-${section}`}{isCurrent && ` · Roll ${student.roll}`}</small></div>
+        <div><b>{student.name}</b><small>{student.id} · {sections.label(shownClass)}{shownSection?.strand ? ` · ${shownSection.strand}` : ""}{isCurrent && ` · Roll ${student.roll}`}</small></div>
       </div>
       {loading && <p className="hint" role="status">Loading {year.label} grades…</p>}
       {past.error && !isCurrent && <div className="alert error" role="alert">{past.error}</div>}

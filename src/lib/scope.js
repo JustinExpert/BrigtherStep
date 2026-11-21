@@ -4,22 +4,30 @@ import { useMemo } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { useData } from "./DataContext.jsx";
 import { ADMINS } from "./permissions.js";
-import { CLASSES, DATA, TERMS } from "../constants.js";
+import { DATA, TERMS } from "../constants.js";
+import { bySchoolOrder } from "../levels.js";
 
+/**
+ * This school year's sections a user works with, in school order: admins all of them; a teacher the
+ * sections they teach (assignments) plus those they advise (`homeroom` = the first one they advise).
+ */
 export function useScope() {
   const { user } = useAuth();
-  const { assignments, teachers } = useData();
+  const { assignments, classes, school } = useData();
   return useMemo(() => {
-    if (ADMINS.includes(user.role)) return { all: true, classes: CLASSES, assignments, inScope: () => true };
-    if (user.role !== "teacher") return { all: false, classes: [], assignments: [], inScope: () => false };
+    const year = school.academicYear.key;
+    const current = classes.filter((c) => c.year === year).sort(bySchoolOrder).map((c) => c.id);
+    if (ADMINS.includes(user.role)) return { all: true, classes: current, assignments, advised: [], inScope: () => true };
+    if (user.role !== "teacher") return { all: false, classes: [], assignments: [], advised: [], inScope: () => false };
     const mine = assignments.filter((a) => a.teacherId === user.teacherId);
-    const homeroom = teachers.find((t) => t.id === user.teacherId)?.class;
-    const classes = [...new Set([...mine.map((a) => a.class), ...(homeroom ? [homeroom] : [])])].sort();
-    return { all: false, classes, assignments: mine, homeroom, inScope: (cls) => classes.includes(cls) };
-  }, [user, assignments, teachers]);
+    const advised = classes.filter((c) => c.year === year && c.adviser === user.teacherId).map((c) => c.id);
+    const set = new Set([...mine.map((a) => a.class), ...advised]);
+    return { all: false, classes: current.filter((id) => set.has(id)), assignments: mine, advised, homeroom: advised[0], inScope: (cls) => set.has(cls) };
+  }, [user, assignments, classes, school.academicYear.key]);
 }
 
 export const WHOLE_SCHOOL = "Whole school";
+/** The section an announcement is for (null = whole school). */
 const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? aud.replace(/^Class /, "") : null);
 
 /**

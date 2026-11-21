@@ -9,6 +9,8 @@ import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
 import Select from "../components/Select.jsx";
 import DateInput from "../components/DateInput.jsx";
+import { useSections } from "../lib/sections.js";
+import { useLevel } from "../lib/level.jsx";
 
 const TABS = [["attendance", "Attendance summary"], ["classlist", "Class list"], ["grades", "Class grades"]];
 const monthStart = () => todayIso().slice(0, 8) + "01";
@@ -20,7 +22,11 @@ export default function Reports() {
   const { toast } = useUI();
   const scope = useScope();
   const [tab, setTab] = useState("attendance");
-  const [cls, setCls] = useState(scope.homeroom || scope.classes[0] || "");
+  const sections = useSections();
+  const { inLevel } = useLevel();
+  const mine = scope.classes.filter(inLevel);
+  const [picked, setCls] = useState(scope.homeroom || "");
+  const cls = mine.includes(picked) ? picked : mine[0] || "";
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayIso());
   const [term, setTerm] = useState("Q2");
@@ -42,7 +48,7 @@ export default function Reports() {
   const pastLoading = !isCurrent && tab === "grades" && past.key !== pastKey;
   const notReady = view.loading || pastLoading ? "Still loading this class — try again in a moment" : view.error || (!isCurrent && tab === "grades" ? past.error : "");
 
-  if (!scope.classes.length) {
+  if (!mine.length) {
     return (
       <>
         <PageHead title="Reports" crumbs={["Reports"]} />
@@ -51,8 +57,8 @@ export default function Reports() {
     );
   }
 
-  const klass = classes.find((c) => c.name === "Class " + cls);
-  const classLabel = `Class ${cls}${klass?.section ? "-" + klass.section : ""}${klass?.strand ? " · " + klass.strand : ""}`;
+  const klass = sections.byId.get(cls);
+  const classLabel = `${sections.label(cls)}${klass?.strand ? " · " + klass.strand : ""}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
   const badRange = from > to;
 
@@ -103,7 +109,7 @@ export default function Reports() {
         </div>
       </PageHead>
 
-      {view.loading && <p className="hint print-hide" role="status">Loading Class {cls}…</p>}
+      {view.loading && <p className="hint print-hide" role="status">Loading {sections.label(cls)}…</p>}
       {view.error && <div className="alert error print-hide" role="alert">{view.error}</div>}
       <div className="card print-hide">
         <div className="tabs" role="tablist" style={{ marginBottom: 16 }}>
@@ -111,7 +117,7 @@ export default function Reports() {
         </div>
         <div className="gb-pickers">
           <label>Class
-            <Select value={cls} onChange={setCls} aria-label="Class" options={scope.classes.map((c) => ({ value: c, label: "Class " + c }))} />
+            <Select value={cls} onChange={setCls} aria-label="Section" options={mine.map((c) => ({ value: c, label: sections.label(c) }))} />
           </label>
           {tab === "attendance" && (
             <>
@@ -194,7 +200,7 @@ export default function Reports() {
               <thead><tr><th className="no-sort">Roll</th><th className="no-sort">Student</th>{subjectNames.map((n) => <th key={n} className="no-sort">{n}</th>)}<th className="no-sort">Average</th></tr></thead>
               <tbody>
                 {pastLoading && <tr><td colSpan={99} className="empty">Loading Class {cls} · {yearLabel}…</td></tr>}
-                {!pastLoading && !reports.length && <tr><td colSpan={99} className="empty">{!isCurrent && past.error ? past.error : `No published grades for Class ${cls} in ${yearLabel}.`}</td></tr>}
+                {!pastLoading && !reports.length && <tr><td colSpan={99} className="empty">{!isCurrent && past.error ? past.error : `No published grades for ${sections.label(cls)} in ${yearLabel}.`}</td></tr>}
                 {!pastLoading && reports.map((r) => {
                   const avg = avgOf(r.rows, term);
                   return (

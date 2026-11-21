@@ -1,7 +1,8 @@
 // Read-only health check of the BrighterStep database: cross-checks every collection against
 // the others (links, ids, school years, value ranges). Changes nothing.
 // Run: npm run db:audit
-import { CLASSES, GRADUATED, SUBJECTS, TERMS } from "../src/constants.js";
+import { GRADUATED, SUBJECTS, TERMS } from "../src/constants.js";
+import { gradeOf, levelOf, parseEnabledLevels } from "../src/levels.js";
 import { LEVELS, MODULES, ROLES } from "../src/lib/permissions.js";
 import { connect, dbName, redact, uri } from "./db.mjs";
 
@@ -48,28 +49,46 @@ try {
   for (const y of pastYears || []) if (!archives.has(y.key)) problem("settings", "closed year has no snapshot in year_archives", y.key);
   const yearOfDate = (date) => [ay, ...(pastYears || [])].find((y) => y && date >= y.start && date <= y.end)?.key;
   if (!routine) problem("settings", "routine (timetable) missing");
-  else for (const cls of CLASSES) if (!Array.isArray(routine[cls])) problem("settings", "timetable missing for a class", cls);
+  else for (const cls of Object.keys(routine)) if (!Array.isArray(routine[cls])) problem("settings", "timetable for a section is malformed", cls);
   if (!perms) problem("settings", "permissions missing");
   else for (const m of MODULES) for (const r of ROLES) if (perms[m.key]?.[r.key] && !LEVELS.includes(perms[m.key][r.key])) problem("settings", "invalid permission level", `${m.key}/${r.key}=${perms[m.key][r.key]}`);
 
   // ---------- Reference data ----------
   const studentById = new Map(students.map((s) => [s._id, s]));
   const teacherIds = new Set(teachers.map((t) => t._id));
-  const validClass = (c) => CLASSES.includes(c);
+  // ---------- Sections (one school year, level and grade each) ----------
+  const levels = parseEnabledLevels(process.env.ENABLED_LEVELS);
+  const sections = await db.collection("classes").find({}).toArray();
+  const sectionById = new Map(sections.map((s) => [s._id, s]));
+  const validClass = (c) => sectionById.has(c);
+  const currentClass = (c) => sectionById.get(c)?.year === ay?.key;
+  const seen = new Set();
+  for (const s of sections) {
+    if (!knownYears.has(s.year)) problem("sections", "school year not in settings", `${s._id}: ${s.year}`);
+    if (!levelOf(s.level)) problem("sections", "unknown level", `${s._id}: ${s.level}`);
+    else if (!levels.includes(s.level)) problem("sections", "level not enabled for this school (ENABLED_LEVELS)", `${s._id}: ${s.level}`);
+    if (gradeOf(s.grade)?.level !== s.level) problem("sections", "grade doesn't belong to its level", `${s._id}: ${s.grade}`);
+    if (!s.name) problem("sections", "missing name", s._id);
+    if (s.adviser && !teacherIds.has(s.adviser)) problem("sections", "adviser doesn't exist", `${s._id} → ${s.adviser}`);
+    const k = `${s.year}|${s.grade}|${s.name}`;
+    if (seen.has(k)) problem("sections", "two sections with the same name in a grade", k);
+    seen.add(k);
+  }
+  for (const cls of Object.keys(routine || {})) if (!currentClass(cls)) problem("settings", "timetable for a section that isn't this year's", cls);
   for (const s of students) {
-    if (!validClass(s.class) && s.class !== GRADUATED) problem("students", "class is not a known class", `${s._id}: ${s.class}`);
+    if (s.class !== GRADUATED && !currentClass(s.class)) problem("students", "not in one of this year's sections", `${s._id}: ${s.class}`);
     if (!s.name?.trim()) problem("students", "missing name", s._id);
     for (const f of ["_r", "marks", "percent", "attendance"]) if (f in s) problem("students", `sample-only field "${f}" (not a real record)`, s._id);
     if ("year" in s) problem("students", "old field `year` (admission year) — should be admittedYear", s._id);
     if (s.class === GRADUATED && !knownYears.has(s.graduatedYear)) problem("students", "graduated without a known graduation year", s._id);
   }
   for (const t of teachers) {
-    if (t.class && !validClass(t.class)) problem("teachers", "homeroom class is not a known class", `${t._id}: ${t.class}`);
+    if ("class" in t) problem("teachers", "old \"class teacher of\" field (advisers live on sections now)", t._id);
     if (!SUBJECTS.includes(t.subject)) problem("teachers", "subject not in the subject list", `${t._id}: ${t.subject}`);
   }
   const pairSeen = new Set();
   for (const a of assignments) {
-    if (!validClass(a.class)) problem("assignments", "unknown class", a._id);
+    if (!currentClass(a.class)) problem("assignments", "not for one of this year's sections", a._id);
     if (!SUBJECTS.includes(a.subject)) problem("assignments", "unknown subject", a._id);
     if (!teacherIds.has(a.teacherId)) problem("assignments", "teacher doesn't exist", `${a._id} → ${a.teacherId}`);
     const k = `${a.class}|${a.subject}`;
@@ -124,7 +143,23 @@ try {
     if (!n.year) problem("notices", "no school year", n._id);
     else if (!knownYears.has(n.year)) problem("notices", "school year not in settings", `${n._id}: ${n.year}`);
     const aud = n.audience || "Whole school";
-    if (aud !== "Whole school" && !validClass(aud.replace(/^Class /, ""))) problem("notices", "audience isn't a known class", `${n._id}: ${aud}`);
+    if (aud !== "Whole school" && !validClass(aud)) problem("notices", "audience isn't a section", `${n._id}: ${aud}`);
+    else if (aud !== "Whole school" && sectionById.get(aud).year !== n.year) problem("notices", "audience section is from another school year", `${n._id}: ${aud}`);
+  }
+
+  // ---------- Enrolments ----------
+  const enrollments = await db.collection("enrollments").find({}).toArray();
+  counts.enrollments = enrollments.length;
+  for (const e of enrollments) {
+    if (!studentById.has(e.studentId)) problem("enrollments", "student doesn't exist", e._id);
+    if (!validClass(e.class)) problem("enrollments", "section doesn't exist", `${e._id}: ${e.class}`);
+    else if (sectionById.get(e.class).year !== e.year) problem("enrollments", "section is from another school year", e._id);
+    if (e.to && e.to < e.from) problem("enrollments", "ends before it starts", e._id);
+  }
+  for (const s of students.filter((x) => currentClass(x.class))) {
+    const open = enrollments.filter((e) => e.studentId === s._id && e.year === ay.key && !e.to);
+    if (open.length !== 1) problem("enrollments", open.length ? "more than one open enrolment this year" : "no enrolment this year", s._id);
+    else if (open[0].class !== s.class) problem("enrollments", "open enrolment doesn't match the student's section", s._id);
   }
 
   // ---------- Accounts ----------

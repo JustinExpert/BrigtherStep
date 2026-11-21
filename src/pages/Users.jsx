@@ -11,6 +11,7 @@ import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { PhotoPicker } from "./MyAccount.jsx";
 import Select from "../components/Select.jsx";
+import { useSections } from "../lib/sections.js";
 
 const STATUS_CLS = { active: "b-green", pending: "b-amber", inactive: "b-red" };
 const tempPassword = () => "Bs-" + randomToken().replace(/[-_]/g, "").slice(0, 6) + Math.floor(Math.random() * 90 + 10);
@@ -20,6 +21,7 @@ const manageableRoles = (actorRole) => (actorRole === "superadmin" ? ROLES.map((
 
 function UserForm({ initial, actorRole, onSave, onCancel }) {
   const { students, teachers, users } = useData();
+  const sections = useSections();
   const roles = manageableRoles(actorRole);
   const isNew = !initial;
   const [f, setF] = useState(() => ({
@@ -68,7 +70,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
         {f.role === "student" && (
           <label>Linked student record
             <Select value={f.studentId} onChange={(v) => setF({ ...f, studentId: v, idNumber: f.idNumber || v })} aria-label="Linked student record" searchable
-              options={[{ value: "", label: "— Not linked —" }, ...students.map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · Class ${s.class}` }))]} />
+              options={[{ value: "", label: "— Not linked —" }, ...students.map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · ${sections.label(s.class)}` }))]} />
           </label>
         )}
         {f.role === "teacher" && (
@@ -81,7 +83,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
           <label style={{ gridColumn: "1 / -1" }}>Children
             <Select value="" placeholder="+ Add a child…" aria-label="Add a child" searchable
               onChange={(v) => v && !f.childIds.includes(v) && setF({ ...f, childIds: [...f.childIds, v] })}
-              options={students.filter((s) => !f.childIds.includes(s.id)).map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · Class ${s.class}` }))} />
+              options={students.filter((s) => !f.childIds.includes(s.id)).map((s) => ({ value: s.id, label: s.name, hint: `${s.id} · ${sections.label(s.class)}` }))} />
             <div className="chips">
               {f.childIds.length ? f.childIds.map((id) => (
                 <span className="chip" key={id}>{studentName(id)}

@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { CLASSES, DATA, SUBJECTS } from "../constants.js";
+import { DATA, SUBJECTS } from "../constants.js";
+import { useSections } from "../lib/sections.js";
+import { useLevel } from "../lib/level.jsx";
+import { useScope } from "../lib/scope.js";
 import { PageHead } from "../components/ui.jsx";
 import Icon from "../components/Icon.jsx";
 import { useAuth } from "../lib/AuthContext.jsx";
@@ -20,18 +23,25 @@ export default function Routine() {
   // Students open on their own class; parents on their (first) child's class; teachers on their own timetable.
   const ownId = user.role === "student" ? user.studentId : user.role === "parent" ? user.childIds?.[0] : null;
   const myClass = ownId ? students.find((s) => s.id === ownId)?.class : null;
-  const [view, setView] = useState(isTeacher ? MINE : myClass || CLASSES[0]);
+  const sections = useSections();
+  const scope = useScope();
+  const { level, inLevel } = useLevel();
+  // Staff pick from this level's sections; students and parents only see their own section.
+  const choices = ownId ? [myClass].filter(Boolean) : (scope.all ? sections.ofLevel(level).map((c) => c.id) : scope.classes.filter(inLevel));
+  const [picked, setView] = useState(isTeacher ? MINE : myClass || null);
+  const view = picked === MINE ? MINE : choices.includes(picked) ? picked : choices[0] || null;
   const [editing, setEditing] = useState(false);
   const week = view === MINE ? teacherWeek(routine, assignments, user.teacherId) : null;
   const periodsTaught = week ? week.flat().filter(Boolean).length : 0;
   const clashes = week ? week.flat().filter((s) => s?.clash.length).length : 0;
-  const roomOf = (cls) => classes.find((c) => c.name === "Class " + cls)?.room || "—";
+  const roomOf = (cls) => sections.byId.get(cls)?.room || "—";
+  const label = sections.label;
   const nameOf = (id) => teachers.find((t) => t.id === id)?.name || "A teacher";
 
   const change = (di, pi, subject) => {
     const clash = findClash(routine, assignments, view, di, pi, subject);
     if (clash) {
-      toast(`${nameOf(clash.teacherId)} already teaches Class ${clash.class} (${clash.subject}) on ${DATA.DAYS[di]} at ${DATA.PERIODS[pi]}.`);
+      toast(`${nameOf(clash.teacherId)} already teaches ${label(clash.class)} (${clash.subject}) on ${DATA.DAYS[di]} at ${DATA.PERIODS[pi]}.`);
       return;
     }
     setSlot(view, di, pi, subject);
@@ -45,12 +55,12 @@ export default function Routine() {
       if (!s) return <div className="slot free"><small>Free</small></div>;
       return (
         <div className={`slot ${s.clash.length ? "clash" : ""}`}>
-          <b>{s.subject}</b><small>Class {s.class} · {roomOf(s.class)}</small>
-          {s.clash.length > 0 && <small className="clash-note">Clash: also Class {s.clash.map((c) => c.class).join(", ")}</small>}
+          <b>{s.subject}</b><small>{label(s.class)} · {roomOf(s.class)}</small>
+          {s.clash.length > 0 && <small className="clash-note">Clash: also {s.clash.map((c) => label(c.class)).join(", ")}</small>}
         </div>
       );
     }
-    const subject = routine[view][di][pi].subject;
+    const subject = routine[view]?.[di]?.[pi]?.subject || ""; // a new section starts with a free week
     if (editing) {
       return (
         <Select className="slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${DATA.PERIODS[pi]} subject`} onChange={(v) => change(di, pi, v)}
@@ -65,7 +75,7 @@ export default function Routine() {
   return (
     <>
       <PageHead title="Timetable" crumbs={["Routine"]}>
-        {canEdit && view !== MINE && (
+        {canEdit && view && view !== MINE && (
           <button className={`btn ${editing ? "" : "light"}`} onClick={() => setEditing((e) => !e)}>
             <Icon name={editing ? "check" : "edit"} />{editing ? "Done editing" : "Edit timetable"}
           </button>
@@ -74,14 +84,17 @@ export default function Routine() {
       <div className="card">
         <div className="card-head">
           <div>
-            <h3>{week ? `My Timetable · ${periodsTaught} periods a week` : `Weekly Timetable · Class ${view} · Room ${roomOf(view)}`}</h3>
+            <h3>{week ? `My Timetable · ${periodsTaught} periods a week` : `Weekly Timetable · ${view ? label(view) : "No section"} · Room ${roomOf(view)}`}</h3>
             {editing && <p>Pick a subject for each period. The teacher comes from Teaching Assignments; a teacher can't be in two classes at once.</p>}
             {week && clashes > 0 && <p className="text-red">{clashes} period(s) clash. Ask the admin to change the timetable or the assignment.</p>}
           </div>
           <div className="tabs" role="tablist">
             {isTeacher && <button role="tab" aria-selected={view === MINE} className={view === MINE ? "on" : ""} onClick={() => { setView(MINE); setEditing(false); }}>My Timetable</button>}
-            {CLASSES.map((c) => <button key={c} role="tab" aria-selected={c === view} className={c === view ? "on" : ""} onClick={() => setView(c)}>Class {c}</button>)}
           </div>
+          {choices.length > 1 && (
+            <Select value={view === MINE ? "" : view} placeholder="Choose a section" aria-label="Section" onChange={(v) => setView(v)}
+              options={choices.map((id) => ({ value: id, label: label(id), group: sections.byId.get(id) ? undefined : undefined }))} />
+          )}
         </div>
         <div className="table-wrap">
           <table className={`timetable ${editing ? "editing" : ""}`}>

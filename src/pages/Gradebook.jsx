@@ -12,6 +12,8 @@ import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
 import Select from "../components/Select.jsx";
 import DateInput from "../components/DateInput.jsx";
+import { useSections } from "../lib/sections.js";
+import { useLevel } from "../lib/level.jsx";
 
 const ORDER = Object.fromEntries(COMPONENTS.map((c, i) => [c.key, i]));
 const fmt = (n) => (n === null || n === undefined ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -56,7 +58,11 @@ export default function Gradebook() {
   const canEdit = usePermission()("grades", "edit");
   const scope = useScope();
   // Teachers pick from their own assignments; admins from all.
-  const options = useMemo(() => [...scope.assignments].sort((a, b) => a.class.localeCompare(b.class) || a.subject.localeCompare(b.subject)), [scope.assignments]);
+  const sections = useSections();
+  const { inLevel } = useLevel();
+  // This level's class + subject pairs, in school order.
+  const order = (id) => sections.current.findIndex((c) => c.id === id);
+  const options = useMemo(() => scope.assignments.filter((a) => inLevel(a.class)).sort((a, b) => order(a.class) - order(b.class) || a.subject.localeCompare(b.subject)), [scope.assignments, inLevel, sections]); // eslint-disable-line react-hooks/exhaustive-deps
   const [pick, setPick] = useState(() => options[0]?.id || "");
   const [term, setTerm] = useState("Q2");
   const [edits, setEdits] = useState({}); // { activityId: { studentId: "typed value" } }
@@ -198,7 +204,7 @@ export default function Gradebook() {
         <div className="gb-pickers">
           <label>Class &amp; subject
             <Select value={current.id} onChange={setPick} aria-label="Class and subject"
-              options={options.map((a) => ({ value: a.id, label: "Class " + a.class + " · " + a.subject, group: "Class " + a.class }))} />
+              options={options.map((a) => ({ value: a.id, label: sections.label(a.class) + " · " + a.subject, group: sections.label(a.class) }))} />
           </label>
           <div>
             <span className="gb-label">Grading period</span>
@@ -230,7 +236,7 @@ export default function Gradebook() {
 
       <div className="card">
         <div className="card-head">
-          <div><h3>Class {current.class} · {current.subject} · {termLabel(term)}</h3><p>{list.length} students · {acts.length} activities</p></div>
+          <div><h3>{sections.label(current.class)} · {current.subject} · {termLabel(term)}</h3><p>{list.length} students · {acts.length} activities</p></div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {dirty && <span className="badge b-amber">Unsaved changes</span>}
             {canEdit && <button className="btn sm" onClick={addActivity}><Icon name="plus" />Add activity</button>}

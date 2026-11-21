@@ -1,7 +1,8 @@
 // What a valid record looks like, per collection. Every add/update is checked here before it's saved,
 // so wrong data (a grade of 150, a student without a name, a score for a student who doesn't exist)
 // never reaches the database. The rules match the app's forms.
-import { CLASSES, GRADUATED, SUBJECTS, TERMS } from "../../src/constants.js";
+import { GRADUATED, SUBJECTS, TERMS } from "../../src/constants.js";
+import { gradeOf, levelOf } from "../../src/levels.js";
 import { COMPONENTS } from "../../src/lib/gradeCalc.js";
 import { bad } from "./access.js";
 
@@ -26,7 +27,7 @@ const RULES = {
   students: {
     name: req(text("Full name", 100)),
     gender: text("Gender", 10, { oneOf: ["Male", "Female"] }),
-    class: req(text("Class", 20, { oneOf: [...CLASSES, GRADUATED] })),
+    class: req(text("Section", 40, { ref: "studentSection" })),
     roll: req(text("Roll", 10)),
     dob: req(date("Date of birth", { after: "1950-01-01", before: today })),
     phone: req(text("Phone", 30, { pattern: PHONE })),
@@ -41,7 +42,6 @@ const RULES = {
     name: req(text("Full name", 100)),
     gender: text("Gender", 10, { oneOf: ["Male", "Female"] }),
     subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
-    class: text("Class teacher of", 20, { oneOf: ["", ...CLASSES] }),
     phone: req(text("Phone", 30, { pattern: PHONE })),
     email: req(text("Email", 254, { pattern: EMAIL })),
     joined: req(date("Joining date", { after: "1950-01-01", before: () => yearsFromToday(1) })),
@@ -49,13 +49,16 @@ const RULES = {
     color: text("Colour", 7, { pattern: COLOR }),
     photo: text("Photo", 400_000, { pattern: PHOTO }),
   },
+  // A section of one grade level in one school year, e.g. Grade 1 – Sampaguita (2026–2027).
   classes: {
-    name: req(text("Class name", 40)),
-    section: text("Section", 2, { oneOf: ["", "A", "B", "C", "D", "E"] }),
-    strand: text("Strand", 20, { oneOf: (ctx) => ["", ...(ctx.settings.school.strands || [])] }),
-    teacher: text("Class teacher", 100, { ref: "teacherName" }),
-    room: req(text("Room", 20)),
+    year: req(text("School year", 9, { pattern: /^\d{4}-\d{4}$/ })),
+    level: req(text("Level", 20, { oneOf: (ctx) => ctx.levels })),
+    grade: req(text("Grade level", 4)),
+    name: req(text("Section name", 40)),
+    adviser: text("Adviser", 40, { ref: "teacher" }),
+    room: text("Room", 20),
     capacity: num("Capacity", 1, 200, { integer: true }),
+    strand: text("Strand", 20, { oneOf: (ctx) => ["", ...(ctx.settings.school.strands || [])] }),
   },
   subjects: {
     name: req(text("Subject name", 60)),
@@ -68,18 +71,18 @@ const RULES = {
     title: req(text("Title", 150)),
     body: req(text("Message", 5000)),
     type: text("Category", 20, { oneOf: ["general", "event", "exam", "course", "teacher"] }),
-    audience: text("Send to", 40, { oneOf: ["Whole school", ...CLASSES.map((c) => `Class ${c}`)] }),
+    audience: text("Send to", 40, { ref: "audience" }), // "Whole school" or a section
     date: req(date("Date", { after: "2000-01-01", before: () => yearsFromToday(1) })),
     author: text("Author", 100), authorId: text("Author", 40), year: text("School year", 9), // set by the server
   },
   assignments: {
-    class: req(text("Class", 20, { oneOf: CLASSES })),
+    class: req(text("Section", 40, { ref: "currentSection" })),
     subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
     teacherId: req(text("Teacher", 40, { ref: "teacher" })),
   },
   grades: {
     studentId: req(text("Student", 40, { ref: "student" })),
-    class: req(text("Class", 20, { oneOf: CLASSES })),
+    class: req(text("Section", 40, { ref: "section" })),
     subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
     term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
     score: req(num("Grade", 0, 100)),
@@ -87,7 +90,7 @@ const RULES = {
     updatedBy: text("Updated by", 40), updatedAt: date("Updated on"), year: req(text("School year", 9)),
   },
   activities: {
-    class: req(text("Class", 20, { oneOf: CLASSES })),
+    class: req(text("Section", 40, { ref: "section" })),
     subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
     term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
     year: req(text("School year", 9)),
@@ -126,6 +129,7 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
         if (r.ref === "student") refs.students.add(v);
         if (r.ref === "teacher") refs.teachers.add(v);
         if (r.ref === "teacherName") refs.teacherNames.add(v);
+        if (["section", "currentSection", "studentSection", "audience"].includes(r.ref)) refs[r.ref].push(v);
         break;
       }
       case "date": {
@@ -155,13 +159,25 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
       }
     }
   }
+  if (col === "classes") {
+    const g = gradeOf(merged.grade);
+    if (!g || g.level !== merged.level) bad(`${merged.grade} isn't a grade level in ${levelOf(merged.level)?.label || merged.level}.`);
+    if (merged.strand && !levelOf(merged.level)?.strands) bad("Only Senior High sections have a strand.");
+  }
   return refs;
 }
 
-export const newRefs = () => ({ students: new Set(), teachers: new Set(), teacherNames: new Set() });
+export const newRefs = () => ({ students: new Set(), teachers: new Set(), teacherNames: new Set(), section: [], currentSection: [], studentSection: [], audience: [] });
 
 /** One query per kind: every referenced student/teacher must exist. */
-export async function checkRefs(db, refs) {
+export async function checkRefs(db, refs, ctx) {
+  if (ctx) {
+    const label = (id) => `"${id}"`;
+    for (const id of refs.section) if (!ctx.sections.has(id)) bad(`Section ${label(id)} doesn't exist.`);
+    for (const id of refs.currentSection) if (!ctx.currentSections.has(id)) bad(`Section ${label(id)} isn't one of this school year's sections.`);
+    for (const id of refs.studentSection) if (id !== GRADUATED && !ctx.currentSections.has(id)) bad(`Section ${label(id)} isn't one of this school year's sections.`);
+    for (const id of refs.audience) if (id !== "Whole school" && !ctx.currentSections.has(id)) bad(`Announcements go to the whole school or one of this year's sections.`);
+  }
   const missing = async (col, ids, field = "_id") => {
     if (!ids.size) return null;
     const found = new Set((await db.collection(col).find({ [field]: { $in: [...ids] } }, { projection: { [field]: 1 } }).toArray()).map((d) => d[field]));

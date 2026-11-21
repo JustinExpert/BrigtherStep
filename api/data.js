@@ -6,7 +6,9 @@ import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, chec
 import { getClient } from "./_lib/db.js";
 import { loadView } from "./_lib/views.js";
 import { checkRecord, checkRefs, checkSchool, newRefs } from "./_lib/schema.js";
-import { CLASSES, DATA, SEED } from "../src/data.js";
+import { enroll, rollSections, transferStudent } from "./_lib/sections.js";
+import { todayIso } from "../src/lib/utils.js";
+import { DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
 
@@ -66,8 +68,13 @@ async function mutate(user, body) {
       if (body.col === "notices") Object.assign(item, { author: user.name, authorId: user._id, year: ctx.settings.school.academicYear.key });
       checkScope(ctx, user, body.col, item);
       checkYear(ctx, body.col, { ...item, _id: id });
-      await checkRefs(db, checkRecord(body.col, item, item, ctx));
+      await checkRefs(db, checkRecord(body.col, item, item, ctx), ctx);
+      if (body.col === "classes") await checkSection(db, ctx, id, item);
       try { await coll.insertOne({ _id: id, ...item }); } catch (e) { if (e?.code === 11000) bad("A record with this id already exists."); throw e; }
+      if (body.col === "students" && ctx.currentSections.has(item.class)) {
+        const ay = ctx.settings.school.academicYear, today = todayIso();
+        await enroll(db, { studentId: id, cls: item.class, year: ay.key, from: today < ay.start ? ay.start : today > ay.end ? ay.end : today, reason: "Admitted", by: user._id });
+      }
       return { record: toClient({ _id: id, ...item }) };
     }
 
@@ -84,7 +91,12 @@ async function mutate(user, body) {
       checkScope(ctx, user, body.col, { ...existing, ...patch });
       checkYear(ctx, body.col, existing);
       checkYear(ctx, body.col, { ...existing, ...patch });
-      await checkRefs(db, checkRecord(body.col, patch, { ...existing, ...patch }, ctx));
+      await checkRefs(db, checkRecord(body.col, patch, { ...existing, ...patch }, ctx), ctx);
+      if (body.col === "students" && "class" in patch && patch.class !== existing.class) bad("Use Transfer to move a student to another section (it keeps their history).");
+      if (body.col === "classes") {
+        if (["year", "level", "grade"].some((k) => k in patch && patch[k] !== existing[k])) bad("A section's school year, level and grade can't be changed. Create a new section instead.");
+        await checkSection(db, ctx, id, { ...existing, ...patch });
+      }
       if (body.col === "grades" && ["studentId", "subject", "term", "year"].some((k) => k in patch && patch[k] !== existing[k])) bad("A grade's student, subject, quarter and year can't be changed.");
       if (Object.keys(patch).length) await coll.updateOne({ _id: id }, { $set: patch });
       return {};
@@ -99,6 +111,11 @@ async function mutate(user, body) {
         checkScope(ctx, user, body.col, rec);
         checkYear(ctx, body.col, rec);
         if (body.col === "notices" && !ctx.isAdmin && rec.authorId !== user._id && !(rec.authorId === undefined && rec.author === user.name)) deny("You can only delete your own announcements.");
+        if (body.col === "classes") {
+          const used = await Promise.all([["students", { class: rec._id }], ["grades", { class: rec._id }], ["attendance", { class: rec._id }], ["enrollments", { class: rec._id }]]
+            .map(([c, q]) => db.collection(c).countDocuments(q, { limit: 1 })));
+          if (used.some(Boolean)) bad(`${rec.name} still has students or records, so it can't be deleted.`);
+        }
       }
       await coll.deleteMany({ _id: { $in: existing.map((r) => r._id) } });
       return {};
@@ -123,7 +140,7 @@ async function mutate(user, body) {
         if (body.col === "grades" && id !== `${after.year}|${after.studentId}|${after.subject}|${after.term}`) bad("A grade's id doesn't match its student, subject, quarter and year.");
         return { replaceOne: { filter: { _id: id }, replacement: after, upsert: true } };
       });
-      await checkRefs(db, refs);
+      await checkRefs(db, refs, ctx);
       if (ops.length) await coll.bulkWrite(ops, { ordered: true });
       return {};
     }
@@ -131,7 +148,7 @@ async function mutate(user, body) {
     case "attendance": {
       needEdit("attendance");
       const [cls, date] = String(body.key || "").split("|");
-      if (!CLASSES.includes(cls) || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) bad("Invalid class or date.");
+      if (!ctx.currentSections.has(cls) || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) bad("Invalid class or date.");
       if (!ctx.isAdmin && !ctx.scope.classes.has(cls)) deny("You can only take attendance for classes you teach.");
       const marks = clean(body.marks);
       if (!isObj(marks) || Object.entries(marks).some(([sid, v]) => !sid.startsWith("STU-") || !["P", "A", "L"].includes(v))) bad("Invalid attendance marks.");
@@ -172,12 +189,12 @@ async function mutate(user, body) {
 
       // One transaction: either the year changes *and* students move up, or nothing changes.
       const session = (await getClient()).startSession();
-      let promoted = 0, graduated = 0;
+      let promoted = 0, graduated = 0, sections = 0;
       try {
         // Snapshot of the closing year's setup, which changes once the new year starts:
         // classes, teaching assignments, timetable and which class each student was in.
         const [classes, assignments, enrolled] = await Promise.all([
-          db.collection("classes").find({}).toArray(), db.collection("assignments").find({}).toArray(),
+          db.collection("classes").find({ year: cur.key }).toArray(), db.collection("assignments").find({}).toArray(),
           db.collection("students").find({}, { projection: { class: 1 } }).toArray(),
         ]);
         const { routine } = await loadSettings(db);
@@ -187,27 +204,25 @@ async function mutate(user, body) {
             classes, assignments, routine, enrollment: Object.fromEntries(enrolled.map((s) => [s._id, s.class])),
           }, { upsert: true, session });
           await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true, session });
-          if (body.promote === true) {
-            // Top class graduates first, then each class moves up from the top down, so nobody moves twice.
-            const ops = [{ updateMany: { filter: { class: CLASSES.at(-1) }, update: { $set: { class: GRADUATED, graduatedYear: cur.key } } } },
-              ...CLASSES.slice(0, -1).map((c, i) => ({ updateMany: { filter: { class: c }, update: { $set: { class: CLASSES[i + 1] } } } })).reverse()];
-            graduated = await db.collection("students").countDocuments({ class: CLASSES.at(-1) }, { session });
-            const r = await db.collection("students").bulkWrite(ops, { ordered: true, session });
-            promoted = r.modifiedCount - graduated;
-          }
+          // New sections for the new year; students move up a grade (or stay, without promotion).
+          ({ promoted, graduated, sections } = await rollSections(db, ctx, { cur, next: next.academicYear, promote: body.promote === true, by: user._id }, session));
         });
       } finally {
         await session.endSession();
       }
-      return { year: next.academicYear, promoted, graduated };
+      return { year: next.academicYear, promoted, graduated, sections };
     }
+
+    case "transfer":
+      return { transfer: await transferStudent(db, ctx, user, body) };
 
     case "slot": {
       needEdit("routine");
       const { cls, day, period, subject } = body;
-      if (!CLASSES.includes(cls) || !Number.isInteger(day) || day < 0 || day >= DATA.DAYS.length || !Number.isInteger(period) || period < 0 || period >= DATA.PERIODS.length) bad("Invalid timetable slot.");
+      if (!ctx.currentSections.has(cls) || !Number.isInteger(day) || day < 0 || day >= DATA.DAYS.length || !Number.isInteger(period) || period < 0 || period >= DATA.PERIODS.length) bad("Invalid timetable slot.");
       if (typeof subject !== "string" || subject.length > 60 || subject.includes("$")) bad("Invalid subject.");
       const { routine } = await loadSettings(db);
+      routine[cls] ||= DATA.DAYS.map(() => DATA.PERIODS.map(() => ({ subject: "" }))); // a new section starts with a free week
       routine[cls][day][period] = { subject };
       await db.collection("settings").updateOne({ _id: "routine" }, { $set: { value: routine } }, { upsert: true });
       return {};
@@ -235,7 +250,7 @@ async function mutate(user, body) {
       if (body.backup?.app !== "brighterstep" || !isObj(data) || !isObj(data.db)) bad("That file isn't a valid BrighterStep backup.");
       const rows = {};
       for (const c of COLLECTIONS) {
-        const list = data.db[c];
+        const list = data.db[c] ?? (c === "enrollments" ? [] : undefined); // backups from before enrolment history have none
         if (!Array.isArray(list)) bad(`The backup is missing ${c}.`);
         rows[c] = list.map((r) => clean(r));
       }
@@ -268,6 +283,13 @@ async function mutate(user, body) {
     default:
       return bad("Unknown operation.");
   }
+}
+
+/** A new or edited section: this school year's, and its name unique within its grade. */
+async function checkSection(db, ctx, id, sec) {
+  if (sec.year !== ctx.settings.school.academicYear.key) bad("Sections are created for the current school year.");
+  const twin = await db.collection("classes").findOne({ _id: { $ne: id }, year: sec.year, grade: sec.grade, name: sec.name });
+  if (twin) bad(`There's already a section called "${sec.name}" in that grade this year.`);
 }
 
 /** Replaces all school data (used by restore and reset). Sessions are kept; removed accounts lose access on their next request. */

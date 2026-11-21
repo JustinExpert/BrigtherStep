@@ -7,6 +7,8 @@ import { todayIso } from "../lib/utils.js";
 import { Avatar, PageHead, StatTile } from "../components/ui.jsx";
 import Select from "../components/Select.jsx";
 import DateInput from "../components/DateInput.jsx";
+import { useSections } from "../lib/sections.js";
+import { useLevel } from "../lib/level.jsx";
 
 const OPTS = [["P", "Present"], ["A", "Absent"], ["L", "Late"]];
 
@@ -15,7 +17,11 @@ export default function Attendance() {
   const { toast } = useUI();
   const canEdit = usePermission()("attendance", "edit");
   const scope = useScope(); // teachers only see the classes they teach
-  const [cls, setCls] = useState(scope.homeroom || scope.classes[0] || "");
+  const sections = useSections();
+  const { inLevel } = useLevel();
+  const mine = scope.classes.filter(inLevel); // this level's sections the user can take attendance for
+  const [picked, setCls] = useState(scope.homeroom || "");
+  const cls = mine.includes(picked) ? picked : mine[0] || "";
   // Attendance can only be taken on days of the open school year, up to today.
   const ay = school.academicYear;
   const lastDay = todayIso() < ay.end ? todayIso() : ay.end;
@@ -37,7 +43,7 @@ export default function Attendance() {
 
   const count = (v) => list.filter((s) => marks[s.id] === v).length;
   const saved = !!attendance[key];
-  if (!scope.classes.length) {
+  if (!mine.length) {
     return (
       <>
         <PageHead title="Attendance" crumbs={["Attendance"]} />
@@ -50,7 +56,7 @@ export default function Attendance() {
     <>
       <PageHead title="Attendance" crumbs={["Attendance"]}>
         {canEdit ? (
-          <button className="btn" disabled={!ready} title={view.error || undefined} onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for Class ${cls}`); }}>
+          <button className="btn" disabled={!ready} title={view.error || undefined} onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for ${sections.label(cls)}`); }}>
             {view.loading ? "Loading…" : saved ? "Update attendance" : "Save attendance"}
           </button>
         ) : <span className="badge b-blue">View only</span>}
@@ -63,10 +69,10 @@ export default function Attendance() {
       </div>
       <div className="card">
         <div className="card-head">
-          <div><h3>Class {cls}</h3><p>{saved ? "Saved — you can still make changes." : "Not saved yet for this date."}</p></div>
+          <div><h3>{sections.label(cls)}</h3><p>{saved ? "Saved — you can still make changes." : "Not saved yet for this date."}</p></div>
           <div className="table-tools">
             <Select value={cls} onChange={setCls} aria-label="Class"
-              options={scope.classes.map((c) => ({ value: c, label: "Class " + c + (c === scope.homeroom ? " (homeroom)" : "") }))} />
+              options={mine.map((c) => ({ value: c, label: sections.label(c) + (scope.advised.includes(c) ? " (advisory)" : "") }))} />
             <DateInput value={date} min={ay.start} max={lastDay < ay.start ? ay.start : lastDay} required onChange={(v) => v && setDate(v)}
               aria-label="Attendance date" title={`School year ${ay.label}: ${ay.start} to ${ay.end}`} />
             <button className="btn sm light" onClick={() => setMarks(Object.fromEntries(list.map((s) => [s.id, "P"])))}>Mark all present</button>

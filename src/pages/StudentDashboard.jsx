@@ -8,6 +8,7 @@ import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
 import { buildReport, subjectsOf, teacherFor, useVisibleNotices } from "../lib/scope.js";
+import { useSections } from "../lib/sections.js";
 
 const STATUS = { P: ["Present", "b-green"], A: ["Absent", "b-red"], L: ["Late", "b-amber"] };
 
@@ -55,8 +56,8 @@ export function StudentOverview({ me, parentView = false }) {
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
   const today = routine[me.class]?.[dayIdx] || [];
   const subjects = classSubjects(routine, me.class, assignments, teachers);
-  const classTeacher = teachers.find((t) => t.class === me.class);
-  const section = classes.find((c) => c.name === "Class " + me.class)?.section;
+  const sections = useSections();
+  const classTeacher = teachers.find((t) => t.id === sections.byId.get(me.class)?.adviser); // the section's adviser
   const log = attendanceLog(attendance, me);
   const count = (v) => log.filter((r) => r.status === v).length;
 
@@ -65,7 +66,7 @@ export function StudentOverview({ me, parentView = false }) {
       <div className="card">
         <h2 style={{ fontSize: 24 }}>{parentView ? `${me.name}'s overview` : `Hello, ${me.name.split(" ")[0]} 👋`}</h2>
         <p style={{ color: "var(--muted)", margin: "6px 0 22px" }}>
-          Class {me.class}{section && `-${section}`} · Roll {me.roll}{classTeacher && <> · Class teacher: <b>{classTeacher.name}</b></>} · {school.academicYear.label}
+          {sections.label(me.class)} · Roll {me.roll}{classTeacher && <> · Adviser: <b>{classTeacher.name}</b></>} · {school.academicYear.label}
         </p>
         <div className="stat-grid">
           <StatTile label="Attendance (this year)" value={pct(attendanceRate(log))} icon="list" tone="purple" />
@@ -93,7 +94,7 @@ export function StudentOverview({ me, parentView = false }) {
             {subjects.map((s) => (
               <div className="feed-item" key={s.subject}>
                 <div><h5>{s.subject}</h5><p>{s.teacher}</p></div>
-                <time>Class {me.class}</time>
+                <time>{sections.label(me.class)}</time>
               </div>
             ))}
           </div>

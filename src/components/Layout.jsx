@@ -9,6 +9,10 @@ import { usePermission } from "../lib/usePermission.js";
 import { useVisibleNotices } from "../lib/scope.js";
 import { ADMINS, ROLE_COLOR, ROLE_LABEL, STAFF } from "../lib/permissions.js";
 import { relTime } from "../lib/utils.js";
+import { LevelProvider, LevelTabs } from "../lib/level.jsx";
+
+// Pages that show one school level at a time (the level tabs appear on these).
+const LEVEL_PAGES = ["/students", "/class", "/assignments", "/routine", "/attendance", "/grades", "/reports"];
 
 /*
  * Each link is shown when the user's role is in `roles`, or when the permission matrix
@@ -40,7 +44,7 @@ export const NAV = [
     { to: "/grades", label: "Gradebook", module: "grades" },
     { to: "/report-card", label: "Report Card", roles: ["student", "parent"] },
   ]},
-  { to: "/class", label: "Class", icon: "class", module: "classes" },
+  { to: "/class", label: "Sections", icon: "class", module: "classes" },
   { to: "/subject", label: "Subject", icon: "subject", module: "subjects" },
   { to: "/routine", label: "Routine", icon: "calendar", module: "routine" },
   { to: "/attendance", label: "Attendance", icon: "list", module: "attendance" },
@@ -208,7 +212,12 @@ export default function Layout() {
       {menuOpen && <div style={{ position: "fixed", inset: 0, zIndex: 45 }} onClick={() => setMenuOpen(false)} />}
       <div className="shell-main">
         <TopBar onMenu={() => setMenuOpen(true)} />
-        <main className="content"><Suspense fallback={<PageSkeleton />}><Outlet /></Suspense></main>
+        <LevelProvider>
+          <main className="content">
+            {LEVEL_PAGES.includes(pathname) && <LevelTabs />}
+            <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
+          </main>
+        </LevelProvider>
       </div>
     </div>
   );

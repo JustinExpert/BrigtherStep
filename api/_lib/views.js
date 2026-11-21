@@ -1,7 +1,6 @@
 // Data loaded per page (GET /api/data?view=…) instead of all at sign-in, so a large school
 // never sends every grade, activity and attendance record to the browser. Everything is for the
 // open school year and follows the same permission rules as the rest of the API.
-import { CLASSES } from "../../src/data.js";
 import { bad, context, currentYear, deny, gradeFilter, HttpError, toClient } from "./access.js";
 
 const STAFF_ONLY = "This view is for school staff.";
@@ -32,7 +31,7 @@ export async function loadView(user, params) {
     // One class + subject: every quarter's activities and grades (the gradebook).
     case "gradebook": {
       const cls = params.get("class"), subject = params.get("subject");
-      if (!CLASSES.includes(cls) || !subject || subject.length > 60) bad("Choose a class and subject.");
+      if (!ctx.sections.has(cls) || !subject || subject.length > 60) bad("Choose a class and subject.");
       if (!can("grades") || (!isAdmin && !scope.pairs.has(`${cls}|${subject}`))) deny("You can only open gradebooks for classes and subjects you teach.");
       const [g, activities] = await Promise.all([grades({ class: cls, subject }), find("activities", { year, class: cls, subject })]);
       return { grades: g, activities };
@@ -41,7 +40,7 @@ export async function loadView(user, params) {
     // One class: its grades and/or attendance (reports, attendance page).
     case "class": {
       const cls = params.get("class");
-      if (!CLASSES.includes(cls)) bad("Choose a class.");
+      if (!ctx.sections.has(cls)) bad("Choose a class.");
       if (!isAdmin && !scope.classes.has(cls)) deny("You can only open classes you teach.");
       const parts = (params.get("parts") || "grades,attendance").split(",");
       const [g, att] = await Promise.all([
@@ -58,11 +57,14 @@ export async function loadView(user, params) {
       if (!can("students")) deny();
       const s = await db.collection("students").findOne({ _id: id }, { projection: { class: 1 } });
       if (!s) throw new HttpError(404, "That student no longer exists.");
+      // Every section they were in this year, so a transfer doesn't hide earlier attendance.
+      const enrolled = await db.collection("enrollments").find({ studentId: id, year }).toArray();
+      const sections = [...new Set([s.class, ...enrolled.map((e) => e.class)])].filter(mayAttendance);
       const [g, att] = await Promise.all([
         grades({ studentId: id }),
-        mayAttendance(s.class) ? db.collection("attendance").find({ year, class: s.class }).toArray() : [],
+        sections.length ? db.collection("attendance").find({ year, class: { $in: sections } }).toArray() : [],
       ]);
-      return { grades: g, attendance: attendanceMap(att, [id]) };
+      return { grades: g, attendance: attendanceMap(att, [id]), enrollments: enrolled.map(toClient) };
     }
 
     // Dashboard figures, calculated by the database.

@@ -645,3 +645,18 @@ a.year-chip:hover { background: #e9dcfb; }
 .assign-table .ss-trigger, .slot-select.ss-trigger, .ss-trigger.level { height: 36px; padding: 0 8px 0 10px; font-size: 13px; }
 .ss-trigger.level { min-width: 110px; }
 @media (prefers-reduced-motion: reduce) { .ss-panel, .ss-panel.sheet { animation: none; } .ss-chevron { transition: none; } }
+
+/* Level tabs (Kinder · Elementary · Junior High · Senior High) */
+.level-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 18px; padding: 5px; background: #fff; border: 1px solid var(--line); border-radius: 14px; width: fit-content; max-width: 100%; }
+.level-tabs button { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600; color: #55535b; padding: 9px 18px; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+.level-tabs button:hover { background: var(--primary-50); color: var(--primary); }
+.level-tabs button.on { background: var(--primary); color: #fff; box-shadow: 0 4px 12px rgba(123, 44, 223, .25); }
+@media (max-width: 560px) { .level-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; } .level-tabs button { padding: 8px 14px; } }
+
+/* Enrolment history on a student's page */
+.enrol-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.enrol-history li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.enrol-history li:first-child { background: var(--primary-50); }
+.enrol-history b { font-weight: 600; }
+.enrol-history span { color: var(--muted); font-size: 13px; text-align: right; }
+.enrol-history small { grid-column: 1 / -1; color: #55535b; font-size: 12px; }

@@ -1,10 +1,12 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
-import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS } from "./constants.js";
+import { AVATAR_COLORS, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS } from "./constants.js";
 import { makePastYear } from "./samplePastYear.js";
 
-export { AVATAR_COLORS, CLASSES, STRANDS, SUBJECTS, TERMS };
+export { AVATAR_COLORS, STRANDS, SUBJECTS, TERMS };
+// Sample sections: Elementary Grade 1 … Grade 6 (ids kept from the original demo).
+const CLASSES = ["01", "02", "03", "04", "05", "06"];
 const school = structuredClone(DEFAULT_SCHOOL);
 let seed = 11;
 const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
@@ -54,7 +56,6 @@ const teachers = [
 ].map(([name, gender, subject], i) => ({
   id: "TCH-" + (201 + i),
   name, gender, subject,
-  class: CLASSES[i % CLASSES.length],
   phone: `+123 77${pad(int(0, 99999), 5)}`,
   email: name.toLowerCase().replace(/[^a-z]+/g, ".") + "@brighterstep.test",
   joined: `${int(2015, 2025)}-${pad(int(1, 12))}-${pad(int(1, 28))}`,
@@ -67,19 +68,20 @@ const notices = [
   { id: "N2", type: "event", title: "Parent–Teacher Conference", body: "Parent–teacher conferences are on November 21. Please book a slot with your child’s class teacher.", date: "2026-11-15", author: "Admin", audience: "Whole school" },
   { id: "N3", type: "course", title: "New Course", body: "An after-school robotics course opens for classes 04–06. Sign up at the office.", date: "2026-11-10", author: "Admin", audience: "Whole school" },
   { id: "N4", type: "event", title: "Science Fair", body: "The annual science fair will be held in the main hall on November 28.", date: "2026-11-06", author: "Daniel Cruz", audience: "Whole school" },
-  { id: "N6", type: "event", title: "Class 02 Field Trip", body: "Class 02 visits the Science Museum on November 25. Bring the signed permission slip by Friday.", date: "2026-11-14", author: "Grace Okafor", audience: "Class 02" },
+  { id: "N6", type: "event", title: "Class 02 Field Trip", body: "Class 02 visits the Science Museum on November 25. Bring the signed permission slip by Friday.", date: "2026-11-14", author: "Grace Okafor", audience: "02" },
   { id: "N5", type: "exam", title: "Mid-term Timetable", body: "Mid-term exams start December 1. Check your class timetable for any changes.", date: "2026-11-02", author: "Exams Office", audience: "Whole school" },
 ].map((n) => ({ ...n, year: DEFAULT_SCHOOL.academicYear.key })); // posted in the first school year
 
 const classes = CLASSES.map((c, i) => ({
-  id: "CLS-" + c, name: "Class " + c, section: pick(["A", "B"]), strand: { "05": "STEM", "06": "HUMSS" }[c] || "", teacher: teachers[i].name, room: "R-" + (101 + i), capacity: 40,
+  id: c, year: DEFAULT_SCHOOL.academicYear.key, level: "elementary", grade: `G${i + 1}`, name: pick(["A", "B"]),
+  adviser: teachers[i].id, room: "R-" + (101 + i), capacity: 40, strand: "",
 }));
 
 const subjects = SUBJECTS.map((s, i) => ({
   id: "SUB-" + (301 + i), name: s, code: s.slice(0, 3).toUpperCase() + "-" + (101 + i),
   teacher: (teachers.find((t) => t.subject === s) || teachers[0]).name,
   type: ["Science", "Computer", "Art", "Physical Ed."].includes(s) ? "Practical" : "Theory",
-  classes: "01–06",
+  classes: "Grades 1–6",
 }));
 
 // Who teaches a subject in a class: subjects with two teachers are split, 01–03 → first, 04–06 → second.
@@ -175,12 +177,18 @@ for (let d = new Date(`${DEFAULT_SCHOOL.academicYear.start}T12:00:00Z`); d.toISO
 // they're not real records, so they aren't stored. Real figures are calculated from grades and attendance.
 const studentRecords = students.map(({ marks, percent, attendance: _att, ...s }) => s);
 
+const enrollments = studentRecords.map((st) => ({
+  id: `ENR-${st.id}-${DEFAULT_SCHOOL.academicYear.key}`, studentId: st.id, year: DEFAULT_SCHOOL.academicYear.key, class: st.class,
+  from: DEFAULT_SCHOOL.academicYear.start, to: null, reason: "Enrolled", by: "USR-1", at: `${DEFAULT_SCHOOL.academicYear.start}T00:00:00.000Z`,
+}));
+
 // ---------- Last school year (2025–2026), already closed ----------
 const past = makePastYear({ students: studentRecords, assignments, classes, routine });
 school.pastYears = [past.year];
 const archives = [past.archive]; // year_archives: one snapshot per closed year
 
-export const DATA = { students: studentRecords, teachers, notices, classes, subjects, routine, DAYS, PERIODS, assignments, grades: [...grades, ...past.grades], activities, attendance, archives };
+export const DATA = { students: studentRecords, teachers, notices, subjects, routine, DAYS, PERIODS, assignments, grades: [...grades, ...past.grades], activities, attendance, archives,
+  classes: [...classes, ...past.sections], enrollments: [...enrollments, ...past.enrollments] };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.

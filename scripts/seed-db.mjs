@@ -5,7 +5,7 @@ import { DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { connect, dbName, redact, uri } from "./db.mjs";
 
-const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities"];
+const COLLECTIONS = ["students", "teachers", "notices", "classes", "subjects", "users", "assignments", "grades", "activities", "enrollments"];
 const reset = process.argv.includes("--reset");
 
 if (!uri) { console.log("MONGODB_URI is empty in .env — run npm run db:check first."); process.exit(1); }

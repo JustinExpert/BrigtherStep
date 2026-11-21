@@ -1,24 +1,33 @@
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "../lib/AuthContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
-import { CLASSES, AVATAR_COLORS } from "../constants.js";
-import { fmtDate } from "../lib/utils.js";
+import { AVATAR_COLORS } from "../constants.js";
+import { fmtDate, todayIso } from "../lib/utils.js";
+import { gradeLabel } from "../levels.js";
 import CrudPage from "../components/CrudPage.jsx";
 import RecordForm from "../components/RecordForm.jsx";
+import Select from "../components/Select.jsx";
+import DateInput, { longDate } from "../components/DateInput.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { buildReport, useScope } from "../lib/scope.js";
+import { useSections } from "../lib/sections.js";
+import { useLevel } from "../lib/level.jsx";
 import { ReportCardView } from "./ReportCard.jsx";
 import { attendanceLog, attendanceRate } from "./StudentDashboard.jsx";
 import { pct } from "../lib/stats.js";
 
-export const STUDENT_FIELDS = [
+/** Section choices for a dropdown, grouped by grade ("Grade 2 – B" under "Grade 2"). */
+export const sectionOptions = (list) => list.map((c) => ({ value: c.id, label: `${gradeLabel(c.grade)} – ${c.name}`, group: gradeLabel(c.grade) }));
+
+/** The student form. The section is only chosen at admission; after that it changes through Transfer. */
+export const studentFields = (sections, { withSection = true } = {}) => [
   { key: "name", label: "Full name", required: true },
   { key: "gender", label: "Gender", type: "select", options: ["Male", "Female"] },
-  { key: "class", label: "Class", type: "select", options: CLASSES },
+  ...(withSection ? [{ key: "class", label: "Section", type: "select", options: sectionOptions(sections), required: true }] : []),
   { key: "roll", label: "Roll", required: true },
-  { key: "dob", label: "Date of birth", type: "date", required: true },
+  { key: "dob", label: "Date of birth", type: "date", required: true, max: todayIso() },
   { key: "phone", label: "Phone", type: "tel", required: true },
   { key: "parent", label: "Parent / guardian", required: true },
   { key: "email", label: "Email", type: "email" },
@@ -33,25 +42,30 @@ const newStudentDefaults = () => ({
 export default function Students() {
   const navigate = useNavigate();
   const scope = useScope();
+  const sections = useSections();
+  const { level, inLevel } = useLevel();
+  // This level's sections the user works with (a teacher: only theirs).
+  const mine = scope.classes.filter(inLevel);
+  const levelSections = sections.ofLevel(level);
   return (
     <CrudPage
       collection="students" module="students" title={scope.all ? "Students List" : "My Students"} singular="Student" crumbs={["Students"]}
-      listTitle={scope.all ? undefined : `Classes you teach: ${scope.classes.map((c) => "Class " + c).join(", ") || "none yet"}`}
-      rowFilter={scope.all ? undefined : (s) => scope.inScope(s.class)}
-      fields={STUDENT_FIELDS} defaults={newStudentDefaults()}
+      listTitle={scope.all ? undefined : `Sections you teach: ${mine.map(sections.label).join(", ") || "none yet"}`}
+      rowFilter={(s) => (scope.all ? true : scope.inScope(s.class)) && inLevel(s.class)}
+      fields={studentFields(levelSections)} defaults={{ ...newStudentDefaults(), class: levelSections[0]?.id }}
       csv={{
         filename: `students-${new Date().toISOString().slice(0, 10)}.csv`,
-        header: ["Roll", "Name", "ID", "Class", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
-        row: (s) => [s.roll, s.name, s.id, s.class, s.gender, s.dob, s.parent, s.phone, s.email, s.address],
+        header: ["Roll", "Name", "ID", "Section", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
+        row: (s) => [s.roll, s.name, s.id, sections.label(s.class), s.gender, s.dob, s.parent, s.phone, s.email, s.address],
       }}
       searchPlaceholder="Search by name or roll"
-      filter={{ key: "class", label: "All classes", options: scope.classes }}
+      filter={{ key: "class", label: "All sections", options: sectionOptions(mine.map((id) => sections.byId.get(id)).filter(Boolean)) }}
       onView={(r) => navigate(`/students/${r.id}`)}
       cols={[
         { key: "name", label: "Students Name", render: (r) => <div className="who"><Avatar name={r.name} color={r.color} />{r.name}</div> },
         { key: "roll", label: "Roll" },
+        { key: "class", label: "Section", render: (r) => sections.label(r.class) },
         { key: "address", label: "Address" },
-        { key: "class", label: "Class" },
         { key: "dob", label: "Date of Birth", render: (r) => fmtDate(r.dob) },
         { key: "phone", label: "Phone" },
       ]}
@@ -63,16 +77,72 @@ export function AdmissionForm() {
   const { add } = useData();
   const { toast } = useUI();
   const navigate = useNavigate();
+  const sections = useSections();
+  const { level } = useLevel();
+  const choices = sections.ofLevel(level).length ? sections.ofLevel(level) : sections.current;
+  if (!sections.current.length) {
+    return (
+      <>
+        <PageHead title="Admission Form" crumbs={[{ label: "Students", to: "/students" }, "Admission Form"]} />
+        <div className="card empty">There are no sections for this school year yet. <Link className="link" to="/class">Create a section</Link> first.</div>
+      </>
+    );
+  }
   return (
     <>
       <PageHead title="Admission Form" crumbs={[{ label: "Students", to: "/students" }, "Admission Form"]} />
       <div className="card" style={{ maxWidth: 860 }}>
         <div className="card-head"><h3>Student Information</h3></div>
-        <RecordForm fields={STUDENT_FIELDS} initial={{ class: "01" }} submitLabel="Admit student"
+        <RecordForm fields={studentFields(choices)} initial={{ class: choices[0].id }} submitLabel="Admit student"
           onCancel={() => navigate("/students")}
-          onSubmit={(v) => { add("students", { ...newStudentDefaults(), ...v }); toast(`${v.name} admitted`); navigate("/students"); }} />
+          onSubmit={(v) => { add("students", { ...newStudentDefaults(), ...v }); toast(`${v.name} admitted to ${sections.label(v.class)}`); navigate("/students"); }} />
       </div>
     </>
+  );
+}
+
+/** Moves a student to another section of this school year, with a date and a reason (kept in their history). */
+function TransferForm({ student, onDone, onCancel }) {
+  const { school, transfer } = useData();
+  const sections = useSections();
+  const from = sections.byId.get(student.class);
+  const ay = school.academicYear;
+  const today = todayIso();
+  // Same grade first (the usual move between sections), then the rest of the school.
+  const others = sections.current.filter((c) => c.id !== student.class);
+  const options = [
+    ...others.filter((c) => c.grade === from?.grade).map((c) => ({ value: c.id, label: sections.label(c.id), group: `Same grade (${gradeLabel(from.grade)})` })),
+    ...others.filter((c) => c.grade !== from?.grade).map((c) => ({ value: c.id, label: sections.label(c.id), group: "Other grades" })),
+  ];
+  const [f, setF] = useState({ toClass: "", date: today < ay.start ? ay.start : today > ay.end ? ay.end : today, reason: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!f.toClass) return setError("Choose the new section.");
+    if (!f.reason.trim()) return setError("Give a short reason for the transfer.");
+    setBusy(true); setError("");
+    try {
+      await transfer({ studentId: student.id, toClass: f.toClass, date: f.date, reason: f.reason.trim() });
+      onDone(sections.label(f.toClass));
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  if (!options.length) return <><p>There's no other section this school year to move {student.name} to.</p><div className="form-actions"><button className="btn" onClick={onCancel}>OK</button></div></>;
+  return (
+    <form className="form" onSubmit={submit}>
+      {error && <div className="alert error" role="alert">{error}</div>}
+      <p style={{ margin: 0 }}>Moving <b>{student.name}</b> out of <b>{sections.label(student.class)}</b>. Grades and attendance from the old section stay on record.</p>
+      <div className="form-grid">
+        <label>New section *<Select value={f.toClass} onChange={(v) => setF({ ...f, toClass: v })} options={options} placeholder="Choose a section" required aria-label="New section" searchable={options.length > 10} /></label>
+        <label>From *<DateInput value={f.date} min={ay.start} max={ay.end} required onChange={(v) => setF({ ...f, date: v })} aria-label="Transfer date" /></label>
+        <label style={{ gridColumn: "1 / -1" }}>Reason *<input className="input" required maxLength={200} value={f.reason} placeholder="e.g. Parent request, class size balancing"
+          onChange={(e) => setF({ ...f, reason: e.target.value })} /></label>
+      </div>
+      <div className="form-actions">
+        <button type="button" className="btn light" onClick={onCancel}>Cancel</button>
+        <button className="btn" disabled={busy}>{busy ? "Moving…" : "Transfer student"}</button>
+      </div>
+    </form>
   );
 }
 
@@ -80,17 +150,18 @@ export function AdmissionForm() {
 export function StudentDetails({ selfId }) {
   const params = useParams();
   const id = selfId || params.id;
-  const { students, teachers, update } = useData();
+  const { students, teachers, enrollments, school, update } = useData();
   const can = usePermission();
   const { openModal, closeModal, toast } = useUI();
   const scope = useScope();
+  const sections = useSections();
   const data = useData();
   const s = students.find((x) => x.id === id);
   // Staff: this student's grades and attendance load from the server (a student's own profile already has them).
   const view = useView(s && !selfId && scope.inScope(s.class) ? { view: "student", id: s.id } : null);
   // Teachers may only open students in the classes they teach.
   if (s && !selfId && !scope.inScope(s.class)) {
-    return <div className="card empty">This student isn't in any of the classes you teach. <Link className="link" to="/students">Back to my students</Link></div>;
+    return <div className="card empty">This student isn't in any of the sections you teach. <Link className="link" to="/students">Back to my students</Link></div>;
   }
 
   if (!s) {
@@ -101,23 +172,36 @@ export function StudentDetails({ selfId }) {
       </div>
     );
   }
-  const classTeacher = teachers.find((t) => t.class === s.class);
+  const section = sections.byId.get(s.class);
+  const adviser = teachers.find((t) => t.id === section?.adviser);
   const { average } = buildReport(s, data);
+  // This year's moves, newest first (from the student view for staff, or the student's own data).
+  const history = (view.data?.enrollments || enrollments.filter((e) => e.studentId === s.id))
+    .filter((e) => e.year === school.academicYear.key).sort((a, b) => b.from.localeCompare(a.from));
+  const canEdit = !selfId && can("students", "edit");
   const edit = () => openModal("Edit Student", (
-    <RecordForm fields={STUDENT_FIELDS} initial={s} submitLabel="Save changes" onCancel={closeModal}
+    <RecordForm fields={studentFields([], { withSection: false })} initial={s} submitLabel="Save changes" onCancel={closeModal}
       onSubmit={(v) => { update("students", s.id, v); closeModal(); toast("Student updated"); }} />
+  ));
+  const move = () => openModal("Transfer student", (
+    <TransferForm student={s} onCancel={closeModal} onDone={(to) => { closeModal(); toast(`${s.name} moved to ${to}`); }} />
   ));
 
   return (
     <>
       <PageHead title={selfId ? "My Profile" : "Student Details"} crumbs={selfId ? ["My Profile"] : [{ label: "Students", to: "/students" }, s.name]}>
-        {!selfId && can("students", "edit") && <button className="btn" onClick={edit}>Edit student</button>}
+        {canEdit && (
+          <div style={{ display: "flex", gap: 10 }}>
+            {section && <button className="btn light" onClick={move}>Transfer</button>}
+            <button className="btn" onClick={edit}>Edit student</button>
+          </div>
+        )}
       </PageHead>
       <div className="grid-profile">
         <div className="card profile-card">
           <Avatar name={s.name} color={s.color} size="lg" />
           <h2>{s.name}</h2>
-          <span style={{ color: "var(--muted)" }}>{s.id} · Class {s.class} · Roll {s.roll}</span>
+          <span style={{ color: "var(--muted)" }}>{s.id} · {sections.label(s.class)} · Roll {s.roll}</span>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
             <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : pct(attendanceRate(attendanceLog(data.attendance, s)))}</b></div></div>
@@ -133,8 +217,22 @@ export function StudentDetails({ selfId }) {
             <dt>Phone</dt><dd>{s.phone}</dd>
             <dt>Email</dt><dd>{s.email || "—"}</dd>
             <dt>Address</dt><dd>{s.address}</dd>
-            <dt>Class teacher</dt><dd>{classTeacher ? classTeacher.name : "—"}</dd>
+            <dt>Adviser</dt><dd>{adviser ? adviser.name : "—"}</dd>
           </dl>
+          {history.length > 0 && (
+            <>
+              <div className="card-head" style={{ marginTop: 18 }}><h3>Sections this school year</h3></div>
+              <ol className="enrol-history">
+                {history.map((e) => (
+                  <li key={e.id}>
+                    <b>{sections.label(e.class)}</b>
+                    <span>{longDate(e.from)} – {e.to ? longDate(e.to) : "now"}</span>
+                    <small>{e.reason}</small>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
         </div>
       </div>
       {view.loading ? <div className="card"><p className="hint" role="status">Loading grades and attendance…</p></div>
