@@ -64,7 +64,40 @@ export async function loadView(user, params) {
         grades({ studentId: id }),
         sections.length ? db.collection("attendance").find({ year, class: { $in: sections } }).toArray() : [],
       ]);
-      return { grades: g, attendance: attendanceMap(att, [id]), enrollments: enrolled.map(toClient) };
+      const full = can("students") ? await db.collection("students").findOne({ _id: id }) : null;
+      return { grades: g, attendance: attendanceMap(att, [id]), enrollments: enrolled.map(toClient), student: full && toClient(full) };
+    }
+
+    // One page of the Students list: full records, filtered, searched and sorted by the database.
+    // ?level=&class=&q=&sort=name|roll|class|address|dob|phone&dir=1|-1&page=0&per=10 (all=1: up to 10,000 for CSV export)
+    case "students": {
+      if (!can("students")) deny();
+      const int = (k, d) => (Number.isInteger(Number(params.get(k))) ? Number(params.get(k)) : d);
+      const per = Math.min(Math.max(int("per", 10), 1), params.get("all") ? 10_000 : 100);
+      const page = Math.max(int("page", 0), 0);
+      const level = params.get("level"), cls = params.get("class");
+      // This year's sections of the level; a teacher only the ones they teach or advise.
+      let allowed = [...ctx.sections.values()].filter((s) => s.year === year && (!level || s.level === level)).map((s) => s._id);
+      if (!isAdmin) allowed = allowed.filter((id) => scope.classes.has(id));
+      if (cls) {
+        if (!allowed.includes(cls)) deny("You can only list students in sections you teach.");
+        allowed = [cls];
+      }
+      const filter = { class: { $in: allowed } };
+      const q = String(params.get("q") || "").trim().slice(0, 60);
+      if (q) {
+        const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"); // plain text search, never a pattern
+        filter.$or = [{ name: rx }, { roll: rx }, { _id: rx }];
+      }
+      const SORTS = ["name", "roll", "class", "address", "dob", "phone"];
+      const key = SORTS.includes(params.get("sort")) ? params.get("sort") : "class";
+      const dir = params.get("dir") === "-1" ? -1 : 1;
+      const sort = key === "class" ? { class: dir, roll: dir, _id: 1 } : { [key]: dir, _id: 1 };
+      const [rows, total] = await Promise.all([
+        db.collection("students").find(filter).sort(sort).skip(page * per).limit(per).toArray(),
+        db.collection("students").countDocuments(filter),
+      ]);
+      return { rows: rows.map(toClient), total, page, per };
     }
 
     // Dashboard figures, calculated by the database.

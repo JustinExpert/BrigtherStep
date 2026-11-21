@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Icon from "./Icon.jsx";
 import Select from "./Select.jsx";
 
@@ -17,10 +17,12 @@ function pageList(cur, total) {
  * cols:    [{ key, label, render?(row), sortable? = true }]
  * filter:  { key, label, options } — one dropdown filter
  * actions: { onView?, onEdit?, onDelete? } — per-row icons
+ * remote:  { total, onQuery({ q, filter, sort, dir, page, per }) } — the server pages, searches and sorts;
+ *          `rows` is then just the current page. Typing in the search box waits 300 ms before asking.
  */
 export default function DataTable({
   title, rows, cols, filter, actions = {}, onBulkDelete, selectable = !!onBulkDelete,
-  searchPlaceholder = "Search…", initialQuery = "", tools, searchKeys,
+  searchPlaceholder = "Search…", initialQuery = "", tools, searchKeys, remote,
 }) {
   const [q, setQ] = useState(initialQuery);
   const [fv, setFv] = useState("");
@@ -29,7 +31,14 @@ export default function DataTable({
   const [per, setPer] = useState(10);
   const [sel, setSel] = useState(new Set());
 
+  // Remote: tell the server what to show (search debounced so it isn't asked on every keystroke).
+  const [sentQ, setSentQ] = useState(initialQuery);
+  useEffect(() => { if (!remote) return undefined; const t = setTimeout(() => setSentQ(q.trim()), 300); return () => clearTimeout(t); }, [q, remote]);
+  const onQuery = remote?.onQuery;
+  useEffect(() => { onQuery?.({ q: sentQ, filter: fv, sort: sort.key, dir: sort.dir, page, per }); }, [onQuery, sentQ, fv, sort, page, per]);
+
   const visible = useMemo(() => {
+    if (remote) return rows;
     const s = q.trim().toLowerCase();
     // Search only visible columns (plus explicit searchKeys), never hidden fields.
     const keys = [...cols.map((c) => c.key), ...(searchKeys || [])];
@@ -40,11 +49,11 @@ export default function DataTable({
       return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * sort.dir;
     });
     return out;
-  }, [rows, cols, q, filter, fv, sort, searchKeys]);
+  }, [rows, cols, q, filter, fv, sort, searchKeys, remote]);
 
-  const pages = Math.max(1, Math.ceil(visible.length / per));
+  const pages = Math.max(1, Math.ceil((remote ? remote.total : visible.length) / per));
   const p = Math.min(page, pages - 1);
-  const slice = visible.slice(p * per, p * per + per);
+  const slice = remote ? rows : visible.slice(p * per, p * per + per);
   const hasActions = actions.onView || actions.onEdit || actions.onDelete;
   const allOnPage = slice.length > 0 && slice.every((r) => sel.has(r.id));
   const selCount = [...sel].filter((id) => rows.some((r) => r.id === id)).length;
@@ -124,6 +133,7 @@ export default function DataTable({
         <button disabled={p >= pages - 1} onClick={() => setPage(p + 1)} aria-label="Next page"><Icon name="chevR" width="18" /></button>
         <Select value={per} aria-label="Rows per page" onChange={(v) => { setPer(v); setPage(0); }}
           options={[5, 10, 20, 50].map((n) => ({ value: n, label: n + " / page" }))} />
+        {remote && <small className="muted" style={{ marginLeft: 8 }}>{remote.total} total</small>}
       </div>
     </div>
   );

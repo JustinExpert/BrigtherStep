@@ -46,7 +46,9 @@ export default function Reports() {
     return () => { live = false; };
   }, [pastKey, isCurrent, tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const pastLoading = !isCurrent && tab === "grades" && past.key !== pastKey;
-  const notReady = view.loading || pastLoading ? "Still loading this class — try again in a moment" : view.error || (!isCurrent && tab === "grades" ? past.error : "");
+  // Class list: full student records (phone, address…) for this section, loaded when the tab is opened.
+  const roster = useView(tab === "classlist" && cls ? { view: "students", class: cls, all: "1", per: "10000", sort: "roll" } : null);
+  const notReady = view.loading || pastLoading || roster.loading ? "Still loading this class — try again in a moment" : view.error || (!isCurrent && tab === "grades" ? past.error : "");
 
   if (!mine.length) {
     return (
@@ -64,6 +66,7 @@ export default function Reports() {
   const classLabel = `${sections.label(cls)}${klass?.strand ? " · " + klass.strand : ""}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
   const badRange = from > to;
+  const fullList = roster.data?.rows || list;
 
   // ----- Attendance summary: counts per student over the date range -----
   const days = Object.keys(attendance).filter((k) => k.startsWith(cls + "|")).map((k) => k.split("|")[1]).filter((d) => d >= from && d <= to).sort();
@@ -95,7 +98,7 @@ export default function Reports() {
         att.map((r) => [r.s.roll, r.s.name, r.s.id, r.P, r.A, r.L, r.total, r.rate ?? ""]));
     } else if (tab === "classlist") {
       downloadCsv(`class-list-${base}.csv`, ["Roll", "Student", "ID", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
-        list.map((s) => [s.roll, s.name, s.id, s.gender, s.dob, s.parent, s.phone, s.email, s.address]));
+        fullList.map((s) => [s.roll, s.name, s.id, s.gender, s.dob, s.parent, s.phone, s.email, s.address]));
     } else {
       downloadCsv(`grades-${yearKey}-${termLabel(term).replace(/\s+/g, "-").toLowerCase()}-${base}.csv`, ["Roll", "Student", "ID", ...subjectNames, "General average"],
         reports.map((r) => [isCurrent ? r.s.roll : "", r.s.name, r.s.id, ...subjectNames.map((n) => cellOf(r, n) ?? ""), avgOf(r.rows, term) ?? ""]));
@@ -189,7 +192,7 @@ export default function Reports() {
             <table className="report-table">
               <thead><tr><th className="no-sort">Roll</th><th className="no-sort">Student</th><th className="no-sort">ID</th><th className="no-sort">Gender</th><th className="no-sort">Parent / guardian</th><th className="no-sort">Phone</th></tr></thead>
               <tbody>
-                {list.map((s) => (
+                {fullList.map((s) => (
                   <tr key={s.id}><td>{s.roll}</td><td><b>{s.name}</b></td><td>{s.id}</td><td>{s.gender}</td><td>{s.parent}</td><td>{s.phone}</td></tr>
                 ))}
               </tbody>

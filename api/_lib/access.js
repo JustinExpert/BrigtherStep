@@ -121,6 +121,8 @@ const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replac
 
 const SECRET_FIELDS = { passwordHash: 0, salt: 0, resetTokenHash: 0, resetExpires: 0 };
 const TEACHER_CARD = { name: 1, subject: 1, gender: 1, color: 1, photo: 1 };
+/** The student fields every staff page needs; the rest load per page / per student. */
+export const STUDENT_CARD = { name: 1, class: 1, roll: 1, gender: 1, color: 1, parent: 1, load: 1, graduatedYear: 1 };
 const audienceFilter = (classes) => ({ $or: [{ audience: { $in: [null, "", WHOLE_SCHOOL] } }, { audience: { $exists: false } }, { audience: { $in: [...classes].flatMap((c) => [`Class ${c}`, c]) } }] });
 
 /** The open school year's key, e.g. "2026-2027". */
@@ -184,16 +186,23 @@ export async function bootstrap(user) {
     // Staff: grades, gradebook activities and attendance are the bulk of a school's data, so they
     // load per page (api/_lib/views.js: one class, one student, or dashboard totals), not here.
     q = {
-      // Students in sections of levels the school hasn't bought stay on the server.
-      students: can("students") ? find("students", ctx.hiddenSections.length ? { class: { $nin: ctx.hiddenSections } } : {}) : none(),
+      // A slim list of students (enough for rosters, counts and pickers); full records (address, phone, birthday…)
+      // load page by page on the Students page and one at a time on a student's page. Students in sections of
+      // levels the school hasn't bought stay on the server.
+      // A teacher only gets the students of sections they teach or advise, plus irregular students who take one
+      // of their sections' subjects (College adds).
+      students: !can("students") ? none() : find("students", {
+        ...(ctx.hiddenSections.length ? { class: { $nin: ctx.hiddenSections } } : {}),
+        ...(isAdmin ? {} : { $or: [{ class: { $in: [...scope.classes] } }, { "load.adds.class": { $in: [...scope.classes] } }] }),
+      }, STUDENT_CARD),
       teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
       grades: none(),
       activities: none(),
       notices: find("notices", { ...(isAdmin ? {} : audienceFilter(scope.classes)), year }),
       users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
     };
-    // This year's enrolment history (who moved between sections, and when).
-    q.enrollments = can("students") ? find("enrollments", { year }) : none();
+    // Enrolment history loads with each student's page (view=student), not for every student at sign-in.
+    q.enrollments = none();
   } else {
     // Students and parents: only their own (or their children's) records.
     ownStudents = ownStudentIds(user);

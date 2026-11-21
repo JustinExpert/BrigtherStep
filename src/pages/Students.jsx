@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "../lib/api.js";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { usePermission } from "../lib/usePermission.js";
 import { useData, useView } from "../lib/DataContext.jsx";
@@ -48,8 +49,20 @@ export default function Students() {
   // This level's sections the user works with (a teacher: only theirs).
   const mine = scope.classes.filter(inLevel);
   const levelSections = sections.ofLevel(level);
+  // The list is paged, searched and sorted by the server (a school can have thousands of students).
+  const [query, setQuery] = useState(null);
+  const [rev, setRev] = useState(0); // goes up after a save so the page reloads
+  const onQuery = useCallback((qy) => setQuery(qy), []);
+  const params = query && { view: "students", level: level || "", class: query.filter, q: query.q, sort: query.sort || "", dir: String(query.dir), page: String(query.page), per: String(query.per), rev: String(rev) };
+  const list = useView(params);
+  const [last, setLast] = useState({ rows: [], total: 0 });
+  useEffect(() => { if (list.data) setLast({ rows: list.data.rows, total: list.data.total }); }, [list.data]);
+  const csvRows = async () => (await api(`data?${new URLSearchParams({ ...params, page: "0", all: "1", per: "10000" })}`)).rows;
   return (
+    <>
+    {list.error && <div className="alert error" role="alert">{list.error}</div>}
     <CrudPage
+      rows={last.rows} remote={{ total: last.total, onQuery }} afterSave={() => setRev((n) => n + 1)}
       collection="students" module="students" title={scope.all ? "Students List" : "My Students"} singular="Student" crumbs={["Students"]}
       listTitle={scope.all ? undefined : `Sections you teach: ${mine.map(sections.label).join(", ") || "none yet"}`}
       rowFilter={(s) => (scope.all ? true : scope.inScope(s.class)) && inLevel(s.class)}
@@ -58,6 +71,7 @@ export default function Students() {
         filename: `students-${new Date().toISOString().slice(0, 10)}.csv`,
         header: ["Roll", "Name", "ID", "Section", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
         row: (s) => [s.roll, s.name, s.id, sections.label(s.class), s.gender, s.dob, s.parent, s.phone, s.email, s.address],
+        rows: csvRows, // every student matching the search, not just this page
       }}
       searchPlaceholder="Search by name or roll"
       filter={{ key: "class", label: "All sections", options: sectionOptions(mine.map((id) => sections.byId.get(id)).filter(Boolean)) }}
@@ -71,6 +85,7 @@ export default function Students() {
         { key: "phone", label: "Phone" },
       ]}
     />
+    </>
   );
 }
 
@@ -224,7 +239,8 @@ export function StudentDetails({ selfId }) {
   const data = useData();
   const s = students.find((x) => x.id === id);
   // Staff: this student's grades and attendance load from the server (a student's own profile already has them).
-  const view = useView(s && !selfId && scope.inScope(s.class) ? { view: "student", id: s.id } : null);
+  const [rev, setRev] = useState(0); // reload the full record after an edit
+  const view = useView(s && !selfId && scope.inScope(s.class) ? { view: "student", id: s.id, rev: String(rev) } : null);
   // Teachers may only open students in the classes they teach.
   if (s && !selfId && !scope.inScope(s.class)) {
     return <div className="card empty">This student isn't in any of the sections you teach. <Link className="link" to="/students">Back to my students</Link></div>;
@@ -238,6 +254,8 @@ export function StudentDetails({ selfId }) {
       </div>
     );
   }
+  // Staff get a slim student list at sign-in; the full record (address, phone…) comes with this page.
+  const full = { ...s, ...(view.data?.student || {}) };
   const section = sections.byId.get(s.class);
   const adviser = teachers.find((t) => t.id === section?.adviser);
   const { average, college, gwa } = buildReport(s, data);
@@ -246,8 +264,8 @@ export function StudentDetails({ selfId }) {
     .filter((e) => e.year === school.academicYear.key).sort((a, b) => b.from.localeCompare(a.from));
   const canEdit = !selfId && can("students", "edit");
   const edit = () => openModal("Edit Student", (
-    <RecordForm fields={studentFields([], { withSection: false })} initial={s} submitLabel="Save changes" onCancel={closeModal}
-      onSubmit={(v) => { update("students", s.id, v); closeModal(); toast("Student updated"); }} />
+    <RecordForm fields={studentFields([], { withSection: false })} initial={full} submitLabel="Save changes" onCancel={closeModal}
+      onSubmit={(v) => { update("students", s.id, v); data.settled().then(() => setRev((n) => n + 1)); closeModal(); toast("Student updated"); }} />
   ));
   const move = () => openModal("Transfer student", (
     <TransferForm student={s} onCancel={closeModal} onDone={(to) => { closeModal(); toast(`${s.name} moved to ${to}`); }} />
@@ -277,12 +295,12 @@ export function StudentDetails({ selfId }) {
         <div className="card">
           <div className="card-head"><h3>Personal Information</h3></div>
           <dl className="kv">
-            <dt>Full name</dt><dd>{s.name}</dd>
-            <dt>Date of birth</dt><dd>{fmtDate(s.dob)}</dd>
-            <dt>Parent / guardian</dt><dd>{s.parent}</dd>
-            <dt>Phone</dt><dd>{s.phone}</dd>
-            <dt>Email</dt><dd>{s.email || "—"}</dd>
-            <dt>Address</dt><dd>{s.address}</dd>
+            <dt>Full name</dt><dd>{full.name}</dd>
+            <dt>Date of birth</dt><dd>{full.dob ? fmtDate(full.dob) : "…"}</dd>
+            <dt>Parent / guardian</dt><dd>{full.parent}</dd>
+            <dt>Phone</dt><dd>{full.phone ?? "…"}</dd>
+            <dt>Email</dt><dd>{full.email || (view.loading ? "…" : "—")}</dd>
+            <dt>Address</dt><dd>{full.address ?? "…"}</dd>
             <dt>Adviser</dt><dd>{adviser ? adviser.name : "—"}</dd>
           </dl>
           {history.length > 0 && (

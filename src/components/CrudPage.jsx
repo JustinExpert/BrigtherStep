@@ -16,6 +16,7 @@ export default function CrudPage({
   collection, title, listTitle, singular, crumbs, fields, cols, filter, onView,
   module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id, rowFilter, subtitle, csv,
   prepare = (vals) => vals, // last change to the form's values before saving: prepare(vals, row | null)
+  rows: givenRows, remote, afterSave, // server-paged lists: the current page, { total, onQuery }, and a refresh after saving
 }) {
   const data = useData();
   const can = usePermission();
@@ -23,7 +24,9 @@ export default function CrudPage({
   const location = useLocation();
   const canEdit = can(module, "edit");
   // rowFilter limits what this user may see (e.g. a teacher sees only their classes).
-  const rows = rowFilter ? data[collection].filter(rowFilter) : data[collection];
+  const all = givenRows || data[collection];
+  const rows = rowFilter ? all.filter(rowFilter) : all;
+  const saved = () => afterSave && data.settled().then(afterSave);
 
   const openForm = (row) =>
     openModal(row ? `Edit ${singular}` : `Add ${singular}`, (
@@ -32,6 +35,7 @@ export default function CrudPage({
         onSubmit={(raw) => {
           const vals = prepare(raw, row);
           row ? data.update(collection, row.id, vals) : data.add(collection, { ...defaults, ...vals });
+          saved();
           closeModal();
           toast(row ? `${singular} updated` : `${singular} added`);
         }} />
@@ -39,6 +43,7 @@ export default function CrudPage({
 
   const del = (row) => confirm(`Delete ${singular.toLowerCase()}?`, `"${describe(row)}" will be removed permanently.`, () => {
     data.remove(collection, row.id);
+    saved();
     toast(`${singular} deleted`);
   });
 
@@ -51,11 +56,12 @@ export default function CrudPage({
         key={location.key}
         title={listTitle || `${singular} Information`}
         rows={rows}
+        remote={remote}
         cols={cols}
         filter={filter}
         searchPlaceholder={searchPlaceholder}
         tools={csv && (
-          <button className="btn light sm" onClick={() => { downloadCsv(csv.filename, csv.header, rows.map(csv.row)); toast("CSV downloaded"); }}>
+          <button className="btn light sm" onClick={async () => { downloadCsv(csv.filename, csv.header, (csv.rows ? await csv.rows() : rows).map(csv.row)); toast("CSV downloaded"); }}>
             <Icon name="download" />Export CSV
           </button>
         )}
@@ -63,6 +69,7 @@ export default function CrudPage({
         actions={{ onView, ...(canEdit ? { onEdit: openForm, onDelete: del } : {}) }}
         onBulkDelete={canEdit ? (ids, done) => confirm(`Delete ${ids.length} records?`, "This cannot be undone.", () => {
           data.remove(collection, ids);
+          saved();
           done();
           toast(`${ids.length} records deleted`);
         }) : undefined}

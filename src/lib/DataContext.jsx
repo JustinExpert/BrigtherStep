@@ -82,6 +82,8 @@ export function DataProvider({ children }) {
 
   const actions = useMemo(() => ({
     load, clear, send,
+    /** Resolves once every change sent so far has been saved (or refused) by the server. */
+    settled: () => queue.current,
     add: (col, item) => {
       const id = PREFIX[col] + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
       setDb((d) => ({ ...d, [col]: [{ ...item, id }, ...d[col]] }));
