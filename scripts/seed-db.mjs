@@ -47,9 +47,10 @@ try {
   // Indexes for the queries the app makes (and one unique rule: one account per email).
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
   await db.collection("students").createIndex({ class: 1, roll: 1 });
-  await db.collection("grades").createIndex({ studentId: 1, term: 1 });
-  await db.collection("grades").createIndex({ class: 1, subject: 1, term: 1 });
-  await db.collection("activities").createIndex({ class: 1, subject: 1, term: 1 });
+  // Grades and activities are always read for one school year, so `year` leads (same as api/_lib/access.js).
+  await db.collection("grades").createIndex({ studentId: 1, year: 1, published: 1 });
+  await db.collection("grades").createIndex({ year: 1, class: 1, subject: 1, term: 1 });
+  await db.collection("activities").createIndex({ year: 1, class: 1, subject: 1, term: 1 });
   await db.collection("assignments").createIndex({ class: 1, subject: 1 }, { unique: true });
   await db.collection("assignments").createIndex({ teacherId: 1 });
 
