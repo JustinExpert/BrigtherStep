@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { buildReport } from "../lib/scope.js";
-import { TERMS } from "../constants.js";
+import { RATINGS, TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
@@ -61,7 +61,7 @@ export function ReportCardView({ student, showPrint = true }) {
       </div>
       {loading && <p className="hint" role="status">Loading {year.label} grades…</p>}
       {past.error && !isCurrent && <div className="alert error" role="alert">{past.error}</div>}
-      {report.college ? <CollegeTables report={report} /> : (
+      {report.kinder ? <KinderTable report={report} /> : report.college ? <CollegeTables report={report} /> : report.shs ? <SemesterTables report={report} school={school} /> : (
       <div className="table-wrap">
         <table className="rc-table">
           <thead>
@@ -98,14 +98,83 @@ export function ReportCardView({ student, showPrint = true }) {
       )}
       <p className="hint" style={{ marginTop: 12 }}>
         Only published grades are shown; "—" means not graded or not published yet.{" "}
-        {report.college
+        {report.kinder ? "Kinder progress is a checklist: B = Beginning, D = Developing, C = Consistent, for each learning area every quarter. "
+          : report.college
           ? "Final = average of Prelim, Midterm and Finals, converted to the 1.00–5.00 scale (3.00 passing). GWA = units-weighted average; INC and DRP don't count. "
+          : report.shs ? "Senior High subjects run for one semester: Final = average of its two quarters. "
           : "Final = average of published quarters. "}
         {isCurrent
           ? <>Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late ({log.length ? `${attendanceRate(log)}% attendance` : "nothing recorded yet"}).</>
           : <>This is a closed school year, so these grades can no longer be changed. Teachers shown are the ones who entered the grades.</>}
       </p>
     </div>
+  );
+}
+
+/** Kinder report card: a rating (B / D / C) for each learning area every quarter; no number grades. */
+function KinderTable({ report }) {
+  const tone = { B: "b-red", D: "b-amber", C: "b-green" };
+  return (
+    <>
+      <div className="table-wrap">
+        <table className="rc-table">
+          <thead><tr><th className="no-sort">Learning area</th><th className="no-sort">Teacher</th>{TERMS.map((t) => <th key={t.key} className="no-sort">{t.key}</th>)}</tr></thead>
+          <tbody>
+            {report.rows.map((r) => (
+              <tr key={r.subject}>
+                <td><b>{r.subject}</b></td><td>{r.teacher}</td>
+                {TERMS.map((t) => <td key={t.key}>{r.terms[t.key] ? <Badge value={r.terms[t.key]} cls={tone[r.terms[t.key]]} /> : <span className="muted">—</span>}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint" style={{ marginTop: 8 }}>{RATINGS.map((x) => <span key={x.key} style={{ marginRight: 14 }}><b>{x.key}</b> {x.label} — {x.hint.toLowerCase()}</span>)}</p>
+    </>
+  );
+}
+
+/** Senior High report card: one table per semester (Q1–Q2, Q3–Q4), each with its general average. */
+function SemesterTables({ report, school }) {
+  const cell = (v) => (v === null || v === undefined ? <span className="muted">—</span> : <span className={v < school.passingMark ? "fail" : ""}>{v}</span>);
+  return (
+    <>
+      {report.semesters.map((sem) => {
+        const periods = sem.rows[0]?.periods || [];
+        return (
+          <div className="table-wrap" key={sem.key} style={{ marginBottom: 16 }}>
+            <table className="rc-table">
+              <thead>
+                <tr><th className="no-sort" colSpan={5 + periods.length}>{sem.label}</th></tr>
+                <tr>
+                  <th className="no-sort">Subject</th><th className="no-sort">Teacher</th>
+                  {periods.map((t) => <th key={t.key} className="no-sort">{t.key}</th>)}
+                  <th className="no-sort">Final</th><th className="no-sort">Grade</th><th className="no-sort">Remark</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sem.rows.map((r) => {
+                  const g = r.final === null ? null : gradeFor(school, r.final);
+                  return (
+                    <tr key={r.subject}>
+                      <td><b>{r.subject}</b></td><td>{r.teacher}</td>
+                      {periods.map((t) => <td key={t.key}>{cell(r.terms[t.key])}</td>)}
+                      <td><b>{cell(r.final)}</b></td>
+                      <td>{g ? <Badge value={g.grade} cls={r.final >= school.passingMark ? "b-green" : "b-red"} /> : "—"}</td>
+                      <td>{g ? g.remark : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr><td colSpan={2 + periods.length}><b>General average · {sem.label}</b></td><td><b>{sem.average ?? "—"}</b></td><td colSpan={2} /></tr>
+              </tfoot>
+            </table>
+          </div>
+        );
+      })}
+      {report.semesters.length > 1 && <p><b>General average for the school year: {report.average ?? "—"}</b></p>}
+    </>
   );
 }
 

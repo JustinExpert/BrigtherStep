@@ -3,12 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { usePermission } from "../lib/usePermission.js";
 import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
-import { AVATAR_COLORS } from "../constants.js";
+import { AVATAR_COLORS, SEMESTERS } from "../constants.js";
 import { fmtDate, todayIso } from "../lib/utils.js";
-import { gradeLabel } from "../levels.js";
+import { gradeLabel, offers, studentSubjects } from "../levels.js";
 import CrudPage from "../components/CrudPage.jsx";
 import RecordForm from "../components/RecordForm.jsx";
 import Select from "../components/Select.jsx";
+import Icon from "../components/Icon.jsx";
 import DateInput, { longDate } from "../components/DateInput.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { buildReport, useScope } from "../lib/scope.js";
@@ -147,6 +148,71 @@ function TransferForm({ student, onDone, onCancel }) {
 }
 
 /** Staff view any student by URL id; a student sees only their own record via /profile. */
+/**
+ * College: the subjects a student takes this school year. The registrar can drop subjects of the student's
+ * block section and add subjects from other College sections (irregular students).
+ */
+function SubjectLoad({ student, canEdit }) {
+  const { subjects, classes, assignments, teachers, school, update } = useData();
+  const { toast } = useUI();
+  const sections = useSections();
+  const year = school.academicYear.key;
+  const load = student.load?.year === year ? student.load : { year, drops: [], adds: [] };
+  const byId = new Map(classes.map((c) => [c.id, c]));
+  const taken = studentSubjects(student, { subjects, sectionsById: byId, year });
+  const own = subjects.filter((x) => offers(x, byId.get(student.class))).map((x) => x.name);
+  const info = (name) => subjects.find((x) => x.name === name) || {};
+  const teacherOf = (cls, subject) => teachers.find((t) => t.id === assignments.find((a) => a.class === cls && a.subject === subject)?.teacherId)?.name || "No teacher yet";
+  const [pick, setPick] = useState("");
+  const save = (next, msg) => { update("students", student.id, { load: { year, drops: next.drops || [], adds: next.adds || [] } }); toast(msg); };
+  // Subjects the student could add: offered in another of this year's College sections, not already taken.
+  const choices = sections.current.filter((c) => c.level === "college" && c.id !== student.class)
+    .flatMap((c) => subjects.filter((x) => offers(x, c) && !taken.some((t) => t.subject === x.name)).map((x) => ({ value: `${c.id}|${x.name}`, label: `${x.name} · ${sections.label(c.id)}`, hint: `${x.units} units · ${SEMESTERS.find((m) => m.key === x.semester)?.label || ""}` })));
+  const units = taken.reduce((n, t) => n + Number(info(t.subject).units || 0), 0);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div><h3>Subject load · {school.academicYear.label}</h3><p>{taken.length} subjects · {units} units. Regular students take their section's subjects; irregular students can drop some and add others from another section.</p></div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th className="no-sort">Subject</th><th className="no-sort">Units</th><th className="no-sort">Semester</th><th className="no-sort">Section</th><th className="no-sort">Teacher</th><th className="no-sort" /></tr></thead>
+          <tbody>
+            {taken.map((t) => (
+              <tr key={t.subject}>
+                <td><b>{t.subject}</b> {t.added && <Badge value="Added" cls="b-blue" />}</td>
+                <td>{info(t.subject).units ?? "—"}</td>
+                <td>{SEMESTERS.find((m) => m.key === info(t.subject).semester)?.label || "—"}</td>
+                <td>{sections.label(t.class)}</td>
+                <td>{teacherOf(t.class, t.subject)}</td>
+                <td>{canEdit && (t.added
+                  ? <button className="btn light sm" onClick={() => save({ ...load, adds: load.adds.filter((a) => a.subject !== t.subject) }, `${t.subject} removed`)}>Remove</button>
+                  : <button className="btn light sm" onClick={() => save({ ...load, drops: [...load.drops, t.subject] }, `${t.subject} dropped`)}>Drop</button>)}</td>
+              </tr>
+            ))}
+            {!taken.length && <tr><td colSpan={6} className="empty">No subjects.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {load.drops.length > 0 && (
+        <p className="hint" style={{ marginTop: 10 }}>Dropped: {load.drops.map((d) => (
+          <span key={d} className="chip" style={{ marginRight: 6 }}>{d}{canEdit && own.includes(d) && <button type="button" aria-label={`Take ${d} again`} onClick={() => save({ ...load, drops: load.drops.filter((x) => x !== d) }, `${d} added back`)}>×</button>}</span>
+        ))}</p>
+      )}
+      {canEdit && (
+        <div className="inline-add" style={{ marginTop: 12 }}>
+          <Select value={pick} onChange={setPick} searchable placeholder={choices.length ? "Add a subject from another section…" : "No other subjects to add"} aria-label="Add a subject" options={choices} />
+          <button type="button" className="btn sm" disabled={!pick} onClick={() => {
+            const [cls, subject] = pick.split("|");
+            save({ ...load, adds: [...load.adds, { class: cls, subject }] }, `${subject} added (${sections.label(cls)})`);
+            setPick("");
+          }}><Icon name="plus" />Add subject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StudentDetails({ selfId }) {
   const params = useParams();
   const id = selfId || params.id;
@@ -235,6 +301,7 @@ export function StudentDetails({ selfId }) {
           )}
         </div>
       </div>
+      {section?.level === "college" && section.year === school.academicYear.key && <SubjectLoad student={s} canEdit={canEdit} />}
       {view.loading ? <div className="card"><p className="hint" role="status">Loading grades and attendance…</p></div>
         : view.error ? <div className="alert error" role="alert">{view.error}</div>
         : <ReportCardView student={s} />}

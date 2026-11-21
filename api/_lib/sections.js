@@ -42,7 +42,8 @@ export async function transferStudent(db, ctx, user, { studentId, toClass, date,
       // Students admitted before enrolment history existed get their first entry now.
       if (!open) await db.collection("enrollments").insertOne({ _id: newId("ENR-"), studentId: student._id, year: ay.key, class: student.class, from: ay.start, to: null, reason: "Enrolled", by: user._id, at: new Date().toISOString() }, { session });
       await enroll(db, { studentId: student._id, cls: toClass, year: ay.key, from: date, reason: text, by: user._id }, session);
-      await db.collection("students").updateOne({ _id: student._id }, { $set: { class: toClass } }, { session });
+      // Dropped / added subjects were made for the old section, so they don't carry over.
+      await db.collection("students").updateOne({ _id: student._id }, { $set: { class: toClass }, $unset: { load: "" } }, { session });
     });
   } finally {
     await session.endSession();

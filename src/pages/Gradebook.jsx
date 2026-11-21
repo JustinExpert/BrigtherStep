@@ -5,7 +5,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
 import { COMPONENTS, collegeGrade, componentsFor, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
-import { gradeId, termsFor } from "../constants.js";
+import { RATINGS, gradeId, termsFor } from "../constants.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
@@ -52,6 +52,82 @@ function ActivityForm({ initial, onSave, onCancel, minMax = 1, components = COMP
   );
 }
 
+/** Kinder: rate each child B (Beginning), D (Developing) or C (Consistent) in one learning area for one quarter. */
+function KinderChecklist({ list, current, term, termName, year, canEdit, title }) {
+  const { user } = useAuth();
+  const { grades, upsertMany } = useData();
+  const { toast, confirm } = useUI();
+  const [picks, setPicks] = useState({}); // { studentId: "B" | "D" | "C" } not published yet
+  useEffect(() => setPicks({}), [current.id, term]);
+  const rec = (sid) => grades.find((g) => g.id === gradeId(year, sid, current.subject, term));
+  const val = (sid) => picks[sid] ?? rec(sid)?.rating ?? "";
+  const changed = list.filter((s) => picks[s.id] !== undefined && picks[s.id] !== (rec(s.id)?.rating ?? ""));
+  const rated = list.filter((s) => val(s.id));
+  const published = list.filter((s) => rec(s.id)?.published);
+  const publish = () => {
+    if (!rated.length) return toast("Rate at least one child first");
+    const apply = () => {
+      upsertMany("grades", rated.map((s) => ({ id: gradeId(year, s.id, current.subject, term), year, studentId: s.id, class: current.class, subject: current.subject, term,
+        rating: val(s.id), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso() })));
+      setPicks({});
+      toast(`Published ${rated.length} rating${rated.length === 1 ? "" : "s"} — parents can see them on the report card`);
+    };
+    const missing = list.length - rated.length;
+    if (missing) confirm("Publish with missing ratings?", `${missing} child(ren) have no rating yet for ${termName}.`, apply, "Publish");
+    else apply();
+  };
+  const unpublish = () => confirm("Unpublish ratings?", "Parents will no longer see these ratings until you publish again.", () => {
+    upsertMany("grades", published.map((s) => ({ ...rec(s.id), published: false })));
+    toast("Ratings moved back to draft");
+  }, "Unpublish");
+  const count = (k) => rated.filter((s) => val(s.id) === k).length;
+  return (
+    <>
+      <div className="stat-grid">
+        {RATINGS.map((x, i) => <StatTile key={x.key} label={`${x.key} · ${x.label}`} value={count(x.key)} icon={["bell", "chart", "check"][i]} tone={["orange", "blue", "green"][i]} />)}
+        <StatTile label="Report cards" value={!published.length ? "Not published" : changed.length ? "Changes not published" : "Published"} icon="notice" tone="purple" />
+      </div>
+      <div className="card">
+        <div className="card-head">
+          <div><h3>{title}</h3><p>{list.length} children · {rated.length} rated. Click a rating for each child, then publish.</p></div>
+          {canEdit && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {changed.length > 0 && <span className="badge b-amber">Unsaved changes</span>}
+              {published.length > 0 && !changed.length && <button className="btn light" onClick={unpublish}>Unpublish</button>}
+              <button className="btn" onClick={publish} disabled={!changed.length && published.length === rated.length && rated.length > 0}>Publish ratings</button>
+            </div>
+          )}
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th className="no-sort">Child</th><th className="no-sort">Rating</th><th className="no-sort">Report card</th></tr></thead>
+            <tbody>
+              {list.map((s) => {
+                const r = rec(s.id);
+                return (
+                  <tr key={s.id}>
+                    <td><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>Roll {s.roll}</small></div></div></td>
+                    <td>
+                      <div className="tabs" role="radiogroup" aria-label={`Rating for ${s.name}`}>
+                        {RATINGS.map((x) => (
+                          <button key={x.key} type="button" role="radio" aria-checked={val(s.id) === x.key} className={val(s.id) === x.key ? "on" : ""} disabled={!canEdit} title={x.hint}
+                            onClick={() => setPicks((p) => ({ ...p, [s.id]: x.key }))}>{x.key} · {x.label}</button>
+                        ))}
+                      </div>
+                    </td>
+                    <td>{r?.published ? <Badge value={r.rating === val(s.id) ? `${r.rating} ✓` : `${r.rating} → ${val(s.id)}`} cls={r.rating === val(s.id) ? "b-green" : "b-amber"} /> : <Badge value={r ? "Draft" : "Not published"} cls="b-blue" />}</td>
+                  </tr>
+                );
+              })}
+              {!list.length && <tr><td colSpan={3} className="empty">No children in this section.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function Gradebook() {
   const { user } = useAuth();
   const { students, grades, activities, school, teachers, upsertMany, add, update, remove } = useData();
@@ -90,10 +166,15 @@ export default function Gradebook() {
 
   const level = sections.levelOf(current.class);
   const college = level === "college";
+  const kinder = level === "kinder"; // Kinder: a B / D / C rating per learning area, no activities
   const COMPS = componentsFor(level); // College: Class Standing / Requirements / Major Exam
   const termInfo = TERMS.find((t) => t.key === term);
   const canMark = college && termInfo?.short === "Finals"; // INC / DRP is given with the Finals grade
-  const list = students.filter((s) => s.class === current.class).sort((a, b) => a.roll.localeCompare(b.roll) || a.name.localeCompare(b.name));
+  // Students in this section who didn't drop the subject, plus irregular students who added it here (College).
+  const thisYear = (s) => (s.load?.year === school.academicYear.key ? s.load : null);
+  const list = students.filter((s) => (s.class === current.class && !thisYear(s)?.drops?.includes(current.subject))
+    || thisYear(s)?.adds?.some((a) => a.class === current.class && a.subject === current.subject))
+    .sort((a, b) => (a.class === current.class ? 0 : 1) - (b.class === current.class ? 0 : 1) || a.roll.localeCompare(b.roll) || a.name.localeCompare(b.name));
   const acts = activities
     .filter((a) => a.class === current.class && a.subject === current.subject && a.term === term)
     .sort((a, b) => ORDER[a.component] - ORDER[b.component] || a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
@@ -212,7 +293,7 @@ export default function Gradebook() {
   return (
     <>
       <PageHead title="Gradebook" crumbs={["Grades", `Gradebook · School year ${school.academicYear.label}`]}>
-        {canEdit && ready && (
+        {canEdit && ready && !kinder && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {isPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}
             <button className="btn light" onClick={saveScores} disabled={!dirty}>Save scores</button>
@@ -234,12 +315,14 @@ export default function Gradebook() {
             </div>
           </div>
         </div>
-        <div className="formula">
+        {kinder ? (
+          <div className="formula"><b>Kinder checklist</b> = {RATINGS.map((x, i) => <span key={x.key}>{i > 0 && " · "}<span className="chip-PT">{x.key} {x.label}</span></span>)}</div>
+        ) : <div className="formula">
           <b>{college ? `${termInfo?.short} grade` : "Quarterly grade"}</b> =
           {groups.map((g, i) => <span key={g.key}>{i > 0 && " + "}<span className={`chip-${g.key}`}>{g.label} × {g.weight}%</span></span>)}
           {transmuting && <span>→ <span className="chip-QA">DepEd transmutation table</span></span>}
           {college && <span>→ <span className="chip-QA">College grade 1.00–5.00</span></span>}
-        </div>
+        </div>}
         <p className="hint">
           Teacher: <b>{teacherName}</b> · {college ? "Passing grade 3.00" : `Passing mark ${school.passingMark}%`} · Component % = points earned ÷ points possible.
           A blank score means "not entered yet" and is skipped; type 0 for missing work. {scope.all ? "" : "You only see classes you're assigned to."}
@@ -248,7 +331,7 @@ export default function Gradebook() {
 
       {!ready ? (
         <div className="card">{view.error ? <div className="alert error" role="alert">{view.error}</div> : <p className="hint" role="status">Loading Class {current.class} · {current.subject}…</p>}</div>
-      ) : (<>
+      ) : kinder ? <KinderChecklist list={list} current={current} term={term} termName={termLabel(term)} year={year} canEdit={canEdit} title={`${sections.label(current.class)} · ${current.subject} · ${termLabel(term)}`} /> : (<>
       <div className="stat-grid">
         <StatTile label="Activities" value={acts.length} icon="list" tone="purple" />
         <StatTile label="Class average" value={avg === null ? "—" : `${fmt(Math.round(avg * 10) / 10)} · ${college ? collegeGrade(school, avg)?.grade : gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
@@ -320,7 +403,7 @@ export default function Gradebook() {
                 const final = reportGrade(c.grade, school, level);
                 return (
                   <tr key={s.id}>
-                    <td className="stu"><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>Roll {s.roll}</small></div></div></td>
+                    <td className="stu"><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>{s.class === current.class ? `Roll ${s.roll}` : `Irregular · ${sections.label(s.class)}`}</small></div></div></td>
                     {groups.map((grp) => [
                       ...grp.acts.map((a) => {
                         const v = typed(a, s.id);

@@ -106,7 +106,10 @@ export function Subjects() {
   const info = levelOf(level);
   const grades = info?.grades || [];
   const inLevel = (g) => gradeOf(g)?.level === level;
-  const strandField = info?.strands ? [{ key: "strands", label: "Strands", type: "checks", options: school.strands || [], hint: "Leave all unticked for a core subject that every strand takes." }] : [];
+  const strandField = info?.strands ? [
+    { key: "semester", label: "Semester", type: "select", options: SEMESTERS.map((x) => ({ value: String(x.key), label: `${x.label} (${x.key === 1 ? "Q1–Q2" : "Q3–Q4"})` })) },
+    { key: "strands", label: "Strands", type: "checks", options: school.strands || [], hint: "Leave all unticked for a core subject that every strand takes." },
+  ] : [];
   // College subjects: units, the semester they're taught in, and optionally only some programs.
   const collegeFields = info?.programs ? [
     { key: "units", label: "Units", type: "number", min: 0, max: 12, required: true },
@@ -118,13 +121,13 @@ export function Subjects() {
       collection="subjects" module="subjects" title="Subjects" singular="Subject" crumbs={["Subjects"]}
       listTitle={`${info?.label || "All"} subjects`}
       rowFilter={(r) => subjects.ofLevel(level).some((x) => x.id === r.id)}
-      defaults={{ type: "Theory", teacher: "", grades: info?.programs ? [grades[0]?.key] : grades.map((g) => g.key), strands: [], ...(info?.programs ? { units: 3, semester: "1", programs: [] } : {}) }}
+      defaults={{ type: "Theory", teacher: "", grades: info?.programs ? [grades[0]?.key] : grades.map((g) => g.key), strands: [], ...(info?.programs ? { units: 3, semester: "1", programs: [] } : info?.strands ? { semester: "1" } : {}) }}
       prepare={(vals, row) => ({
         ...vals,
         // Keep the grade levels this subject has in other levels; only this level's ticks change.
         grades: [...(row?.grades || []).filter((g) => !inLevel(g)), ...vals.grades],
         ...(info?.strands ? {} : { strands: row?.strands || [] }),
-        ...(info?.programs ? { units: Number(vals.units), semester: Number(vals.semester) } : {}),
+        ...(info?.programs ? { units: Number(vals.units), semester: Number(vals.semester) } : info?.strands ? { semester: Number(vals.semester) } : {}),
       })}
       filter={{ key: "type", label: "All types", options: ["Theory", "Practical"] }}
       fields={[
@@ -140,6 +143,7 @@ export function Subjects() {
         { key: "name", label: "Subject", render: (r) => <b>{r.name}</b> },
         { key: "code", label: "Code" },
         { key: "grades", label: "Grade levels", sortable: false, render: (r) => r.grades.filter(inLevel).map(gradeLabel).join(", ") },
+        ...(info?.strands ? [{ key: "semester", label: "Semester", render: (r) => SEMESTERS.find((x) => x.key === r.semester)?.label || "Whole year" }] : []),
         ...(info?.strands ? [{ key: "strands", label: "Strands", sortable: false, render: (r) => (r.strands?.length ? r.strands.map((x) => <Badge key={x} value={x} cls="b-purple" />) : <span className="muted">Core (all)</span>) }] : []),
         ...(info?.programs ? [
           { key: "units", label: "Units" },

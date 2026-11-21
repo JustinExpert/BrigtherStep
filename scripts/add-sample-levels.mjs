@@ -140,8 +140,17 @@ try {
     const sec = sections.find((s) => s._id === a.class);
     const sub = subjects.find((s) => s.name === a.subject);
     const periods = termsFor(sec.level, sub);
-    const use = sec.level === "college" ? (sub.semester === 1 ? periods : []) : periods.slice(0, 2); // 2nd semester hasn't started
+    // 2nd semester hasn't started: College and Senior High grade only 1st-semester subjects; others Q1–Q2.
+    const use = ["college", "senior_high"].includes(sec.level) && sub.semester ? (sub.semester === 1 ? periods : []) : periods.slice(0, 2);
     const pupils = students.filter((s) => s.class === sec._id);
+    if (sec.level === "kinder") { // Kinder: a B / D / C checklist rating per learning area, no activities
+      for (const t of use) for (const s of pupils) {
+        const r = ability[s._id] + int(-10, 10);
+        grades.push({ _id: gradeId(ay.key, s._id, a.subject, t.key), year: ay.key, studentId: s._id, class: sec._id, subject: a.subject, term: t.key,
+          rating: r >= 88 ? "C" : r >= 74 ? "D" : "B", published: true, updatedBy: a.teacherId, updatedAt: dateIn(t.key === "Q1" ? 0 : 1, 3) });
+      }
+      continue;
+    }
     use.forEach((t, ti) => {
       const acts = TEMPLATE.map(([component, title, maxScore], i) => ({
         _id: `ACT-SMP-${sec._id.slice(8)}-${a.subject.replace(/\W+/g, "")}-${t.key}-${i + 1}`, class: sec._id, subject: a.subject, term: t.key, year: ay.key,

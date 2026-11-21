@@ -41,6 +41,7 @@ const RULES = {
     admittedYear: num("Admission year", 1950, 2100, { integer: true }),
     color: text("Colour", 7, { pattern: COLOR }),
     graduatedYear: text("Graduation year", 9, { pattern: /^\d{4}-\d{4}$/ }),
+    load: { label: "Subject load", type: "load" }, // College: dropped and added subjects this school year
   },
   teachers: {
     name: req(text("Full name", 100)),
@@ -74,7 +75,7 @@ const RULES = {
     // Any known grade: a subject keeps grades of levels that are switched off (only sections of on levels can use it).
     grades: req(list("Grade levels", { oneOf: GRADES.map((g) => g.key) })),
     strands: list("Strands", { oneOf: (ctx) => ctx.settings.school.strands || [] }),
-    // College only: units, the semester it's taught in, and (optionally) only some programs.
+    // Senior High and College: the semester it's taught in. College only: units and (optionally) only some programs.
     units: num("Units", 0, 12, { step: 0.5 }),
     semester: num("Semester", 1, 2, { integer: true }),
     programs: list("Programs", { oneOf: programCodes }),
@@ -99,6 +100,7 @@ const RULES = {
     term: req(text("Grading period", 4, { oneOf: ALL_TERMS.map((t) => t.key) })),
     score: num("Grade", 0, 100), // required unless the grade is an INC / DRP mark (College)
     remark: text("Mark", 3, { oneOf: ["", "INC", "DRP"] }),
+    rating: text("Rating", 1, { oneOf: ["B", "D", "C"] }), // Kinder checklist instead of a score
     published: req({ label: "Published", type: "boolean" }),
     updatedBy: text("Updated by", 40), updatedAt: date("Updated on"), year: req(text("School year", 9)),
   },
@@ -168,6 +170,7 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
         if (r.required && !v.length) fail("needs at least one");
         break;
       }
+      case "load": checkLoad(v, merged, ctx); break;
       case "boolean":
         if (typeof v !== "boolean") fail("must be true or false");
         break;
@@ -197,7 +200,9 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
     const college = merged.grades.filter((g) => gradeOf(g)?.level === "college").length;
     if (college && college !== merged.grades.length) bad("A College subject can't also be a K–12 subject. Add it as a separate subject.");
     if (college && (merged.units === undefined || merged.units === null || !merged.semester)) bad("A College subject needs its units and semester.");
-    if (!college && (merged.programs?.length || merged.semester || merged.units)) bad("Only College subjects have units, a semester and programs.");
+    if (!college && (merged.programs?.length || merged.units)) bad("Only College subjects have units and programs.");
+    const shs = merged.grades.some((g) => gradeOf(g)?.level === "senior_high");
+    if (merged.semester && !college && !(shs && merged.grades.every((g) => gradeOf(g)?.level === "senior_high"))) bad("Only Senior High and College subjects have a semester.");
   }
   // Teaching, grades and activities: the section must take the subject (its grade level, and strand in Senior High).
   if (["assignments", "grades", "activities"].includes(col) && ctx.sections.has(merged.class) && ctx.subjectByName.has(merged.subject)) {
@@ -206,12 +211,44 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
     if (!offers(subject, sec)) bad(`${sectionLabel(sec)} doesn't take ${merged.subject}. Add ${gradeLabel(sec.grade)}${sec.strand ? ` (${sec.strand})` : ""}${sec.program ? ` (${sec.program})` : ""} to the subject on the Subjects page first.`);
     if (col === "grades") {
       if (merged.remark && sec.level !== "college") bad("INC and DRP marks are only for College grades.");
-      if (!merged.remark && (merged.score === undefined || merged.score === null)) bad("Grade is required.");
+      const hasScore = merged.score !== undefined && merged.score !== null;
+      if (sec.level === "kinder") {
+        if (!merged.rating) bad("Kinder grades are a rating: B (Beginning), D (Developing) or C (Consistent).");
+        if (hasScore) bad("Kinder grades have a rating, not a score.");
+      } else if (merged.rating) bad("Ratings (B / D / C) are only for Kinder.");
+      else if (!merged.remark && !hasScore) bad("Grade is required.");
     }
     // Quarters for K–12; the subject's semester's Prelim / Midterm / Finals for College.
     if (merged.term && !termsFor(sec.level, subject).some((t) => t.key === merged.term)) bad(`${merged.subject} in ${sectionLabel(sec)} has no "${termLabel(merged.term)}" grading period.`);
   }
   return refs;
+}
+
+/**
+ * A College student's subject load: drops are subjects of their own section; adds are subjects taken in
+ * another of this year's College sections that takes that subject.
+ */
+function checkLoad(load, student, ctx) {
+  if (!isObj(load) || Object.keys(load).some((k) => !["year", "drops", "adds"].includes(k))) bad("Subject load is invalid.");
+  const year = ctx.settings.school.academicYear.key;
+  if (load.year !== year) bad("A subject load can only be changed for the current school year.");
+  const own = ctx.sections.get(student.class);
+  if (!own || own.level !== "college" || !ctx.currentSections.has(own._id)) bad("Only students in one of this year's College sections can add or drop subjects.");
+  const drops = load.drops ?? [], adds = load.adds ?? [];
+  if (!Array.isArray(drops) || !Array.isArray(adds) || drops.length > 30 || adds.length > 30) bad("Subject load is invalid.");
+  const takes = (name, sec) => offers(ctx.subjectByName.get(name), sec);
+  for (const d of drops) if (typeof d !== "string" || !takes(d, own)) bad(`${sectionLabel(own)} doesn't take ${d}, so it can't be dropped.`);
+  if (new Set(drops).size !== drops.length) bad("A subject is dropped twice.");
+  const seen = new Set();
+  for (const a of adds) {
+    if (!isObj(a) || Object.keys(a).some((k) => !["class", "subject"].includes(k)) || typeof a.subject !== "string") bad("Subject load is invalid.");
+    const sec = ctx.sections.get(a.class);
+    if (!sec || sec.level !== "college" || !ctx.currentSections.has(sec._id) || sec._id === own._id) bad("Added subjects must come from another of this year's College sections.");
+    if (!takes(a.subject, sec)) bad(`${sectionLabel(sec)} doesn't take ${a.subject}.`);
+    if (takes(a.subject, own) && !drops.includes(a.subject)) bad(`${a.subject} is already in the student's own section.`);
+    if (seen.has(a.subject)) bad(`${a.subject} is added twice.`);
+    seen.add(a.subject);
+  }
 }
 
 export const newRefs = () => ({ students: new Set(), teachers: new Set(), teacherNames: new Set(), section: [], currentSection: [], studentSection: [], audience: [] });

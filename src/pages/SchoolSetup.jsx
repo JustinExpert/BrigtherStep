@@ -98,7 +98,7 @@ export default function SchoolSetup() {
   const { school, saveSchool, subjects, levels = [] } = useData();
   const { toast, openModal, closeModal } = useUI();
   // Weights for the subjects of the levels this school offers (Subjects page), A–Z.
-  const SUBJECTS = subjects.filter((x) => subjectLevels(x).some((l) => levels.includes(l))).map((x) => x.name).sort((a, b) => a.localeCompare(b));
+  const SUBJECTS = subjects.filter((x) => subjectLevels(x).some((l) => l !== "kinder" && levels.includes(l))).map((x) => x.name).sort((a, b) => a.localeCompare(b));
   const can = usePermission();
   const canEdit = can("school", "edit");
   const [s, setS] = useState(() => ({

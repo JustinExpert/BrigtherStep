@@ -88,6 +88,8 @@ const subjects = SUBJECTS.map((s, i) => ({
   type: ["Science", "Computer", "Art", "Physical Ed."].includes(s) ? "Practical" : "Theory",
   grades: s === "Mathematics" ? [...KINDER, ...range(1, 10)] : range(1, 10), strands: [],
 }));
+// Senior High subjects taught in the 2nd semester (the rest are 1st semester).
+const SHS_SEM2 = ["Personal Development", "Understanding Culture, Society and Politics", "General Biology 1", "Fundamentals of ABM 1", "Philippine Politics and Governance"];
 /** Sample subjects for the other levels: Kinder learning domains and Senior High core and strand subjects. */
 export const SUBJECT_CATALOG = [
   ["Language, Literacy and Communication", "KLLC", KINDER], ["Socio-Emotional Development", "KSED", KINDER],
@@ -99,7 +101,8 @@ export const SUBJECT_CATALOG = [
   ["Business Mathematics", "ABM-BM", SHS, ["ABM"]], ["Fundamentals of ABM 1", "ABM-F1", SHS, ["ABM"]],
   ["Creative Writing", "HUM-CW", SHS, ["HUMSS"]], ["Philippine Politics and Governance", "HUM-PPG", SHS, ["HUMSS"]],
   ["Humanities 1", "GAS-H1", SHS, ["GAS"]], ["Computer Systems Servicing", "TVL-CSS", SHS, ["TVL"]],
-].map(([name, code, grades, strands = []], i) => ({ id: "SUB-" + (310 + i), name, code, teacher: "", type: "Theory", grades, strands }));
+].map(([name, code, grades, strands = []], i) => ({ id: "SUB-" + (310 + i), name, code, teacher: "", type: "Theory", grades, strands,
+  ...(grades === SHS ? { semester: SHS_SEM2.includes(name) ? 2 : 1 } : {}) }));
 // College: general education subjects every program takes, and a few program subjects (units, semester).
 SUBJECT_CATALOG.push(...[
   ["Purposive Communication", "GE-PC", 1, 3], ["Mathematics in the Modern World", "GE-MMW", 1, 3], ["Understanding the Self", "GE-US", 2, 3],

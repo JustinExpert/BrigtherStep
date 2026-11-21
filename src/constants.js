@@ -9,8 +9,15 @@ export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 export const PERIODS = ["08:00", "08:50", "09:40", "10:50", "11:40", "12:30"];
 
 export const TERMS = [
-  { key: "Q1", label: "1st Quarter" }, { key: "Q2", label: "2nd Quarter" },
-  { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
+  { key: "Q1", label: "1st Quarter", sem: 1 }, { key: "Q2", label: "2nd Quarter", sem: 1 },
+  { key: "Q3", label: "3rd Quarter", sem: 2 }, { key: "Q4", label: "4th Quarter", sem: 2 },
+];
+
+/** Kinder checklist ratings (DepEd): given per learning domain each quarter instead of a number grade. */
+export const RATINGS = [
+  { key: "B", label: "Beginning", hint: "Rarely shows the expected skills" },
+  { key: "D", label: "Developing", hint: "Sometimes shows the expected skills" },
+  { key: "C", label: "Consistent", hint: "Always shows the expected skills" },
 ];
 
 /** College grading periods: Prelim, Midterm and Finals in each semester. A college subject belongs to one semester. */
@@ -18,8 +25,16 @@ export const SEMESTERS = [{ key: 1, label: "1st Semester" }, { key: 2, label: "2
 export const COLLEGE_TERMS = SEMESTERS.flatMap((s) => [["P", "Prelim"], ["M", "Midterm"], ["F", "Finals"]]
   .map(([k, short]) => ({ key: `${s.key}${k}`, short, label: `${s.label} · ${short}`, sem: s.key })));
 export const ALL_TERMS = [...TERMS, ...COLLEGE_TERMS];
-/** The grading periods of a subject in a level: quarters for K–12; the subject's semester's periods for College. */
-export const termsFor = (level, subject) => (level === "college" ? COLLEGE_TERMS.filter((t) => !subject?.semester || t.sem === Number(subject.semester)) : TERMS);
+/**
+ * The grading periods of a subject in a level: quarters for K–12 — in Senior High only its semester's two
+ * (1st sem Q1–Q2, 2nd sem Q3–Q4); College: its semester's Prelim / Midterm / Finals.
+ */
+export const termsFor = (level, subject) => {
+  const sem = Number(subject?.semester) || 0;
+  if (level === "college") return COLLEGE_TERMS.filter((t) => !sem || t.sem === sem);
+  if (level === "senior_high" && sem) return TERMS.filter((t) => t.sem === sem);
+  return TERMS;
+};
 export const termLabel = (key) => ALL_TERMS.find((t) => t.key === key)?.label || key;
 
 /** College grade scale: percentage → 1.00 (best) … 3.00 (passing) … 5.00 (failed). Editable per school. */

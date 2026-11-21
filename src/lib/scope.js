@@ -5,6 +5,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useData } from "./DataContext.jsx";
 import { ADMINS } from "./permissions.js";
 import { DATA, SEMESTERS, termLabel, termsFor } from "../constants.js";
+import { studentSubjects } from "../levels.js";
 import { collegeGrade, gwa } from "./gradeCalc.js";
 import { bySchoolOrder } from "../levels.js";
 
@@ -106,12 +107,13 @@ export function buildReport(student, { grades, assignments, teachers, subjects =
   const cls = past ? mine[0]?.class : student.class;
   const level = classes.find((c) => c.id === cls)?.level;
   const college = level === "college";
-  const names = past
-    ? [...new Set(mine.map((g) => g.subject))].sort()
-    : assignments.filter((a) => a.class === student.class).map((a) => a.subject);
+  // This year: the subjects the student takes (own section, minus drops, plus subjects added in another section).
+  const taken = past ? [] : studentSubjects(student, { subjects, sectionsById: new Map(classes.map((c) => [c.id, c])), year: school?.academicYear?.key })
+    .filter((t) => assignments.some((a) => a.class === t.class && a.subject === t.subject));
+  const names = past ? [...new Set(mine.map((g) => g.subject))].sort() : taken.map((t) => t.subject);
   const teacherName = (subject) => (past
     ? teachers.find((t) => t.id === mine.find((g) => g.subject === subject)?.updatedBy)?.name || "—"
-    : teacherFor(assignments, teachers, student.class, subject));
+    : teacherFor(assignments, teachers, taken.find((t) => t.subject === subject)?.class || student.class, subject));
   const rows = names.map((subject) => {
     const info = subjects.find((x) => x.name === subject);
     const periods = termsFor(level, info);
@@ -128,6 +130,17 @@ export function buildReport(student, { grades, assignments, teachers, subjects =
     return { ...row, code: info?.code || "", units: info?.units ?? 0, semester: info?.semester || 1, periods, mark,
       cgrade: mark || !complete ? null : collegeGrade(school, final) };
   });
+  if (level === "kinder") {
+    const kRows = rows.map((r) => ({ ...r, terms: Object.fromEntries(Object.keys(r.terms).map((t) => [t, mine.find((g) => g.subject === r.subject && g.term === t)?.rating ?? null])), final: null }));
+    return { rows: kRows, average: null, cls, kinder: true };
+  }
+  if (level === "senior_high") {
+    rows.forEach((r) => { r.semester = Number(subjects.find((x) => x.name === r.subject)?.semester) || 0; r.periods = termsFor(level, subjects.find((x) => x.name === r.subject)); });
+    const avg = (list) => { const f = list.map((r) => r.final).filter((v) => v !== null); return f.length ? Math.round((f.reduce((a, b) => a + b, 0) / f.length) * 10) / 10 : null; };
+    const semesters = [...SEMESTERS, { key: 0, label: "Whole year" }].map((sem) => ({ ...sem, rows: rows.filter((r) => r.semester === sem.key) }))
+      .filter((x) => x.rows.length).map((x) => ({ ...x, average: avg(x.rows) }));
+    return { rows, average: avg(rows), cls, shs: true, semesters };
+  }
   const finals = rows.map((r) => r.final).filter((v) => v !== null);
   const average = college ? null : finals.length ? Math.round((finals.reduce((a, b) => a + b, 0) / finals.length) * 10) / 10 : null;
   if (!college) return { rows, average, cls };

@@ -225,6 +225,6 @@ export default function Reports() {
 
 /** Average of the published grades for one quarter (1 decimal), or null. */
 function avgOf(rows, term) {
-  const v = rows.map((x) => x.terms[term]).filter((n) => n !== null && n !== undefined);
+  const v = rows.map((x) => x.terms[term]).filter((n) => typeof n === "number"); // Kinder ratings aren't averaged
   return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null;
 }

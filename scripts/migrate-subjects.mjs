@@ -38,7 +38,14 @@ try {
   const add = DATA.subjects.filter((s) => !names.has(s.name.toLowerCase()) && !ids.has(s.id)).map(({ id, ...s }) => ({ _id: id, ...s }));
   if (add.length) { await db.collection("subjects").insertMany(add); console.log(`Catalog: added ${add.length} sample subjects (Kinder, Senior High, College).`); }
 
-  if (!old.length && !add.length) console.log(`Nothing to do: "${dbName}" already has subjects per grade level.`);
+  // 3. Senior High subjects get a semester (1st: Q1–Q2, 2nd: Q3–Q4): the sample's, else 1st semester.
+  const shs = await db.collection("subjects").find({ grades: { $in: ["G11", "G12"] }, semester: { $exists: false } }).toArray();
+  for (const s of shs.filter((x) => x.grades.every((g) => g === "G11" || g === "G12"))) {
+    await db.collection("subjects").updateOne({ _id: s._id }, { $set: { semester: seedByName.get(s.name)?.semester || 1 } });
+  }
+  if (shs.length) console.log(`Senior High: ${shs.length} subjects now have a semester.`);
+
+  if (!old.length && !add.length && !shs.length) console.log(`Nothing to do: "${dbName}" already has subjects per grade level.`);
   else console.log(`Done. Backup of the changed records: ${backupFile}`);
 } catch (e) {
   console.log("MIGRATION FAILED: " + redact(e?.message || e));

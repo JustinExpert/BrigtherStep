@@ -67,5 +67,20 @@ export const offers = (subject, section) => !!subject && !!section && (subject.g
   && (!subject.strands?.length || subject.strands.includes(section.strand))
   && (!subject.programs?.length || subject.programs.includes(section.program));
 
+/**
+ * The subjects a student takes this school year, each with the section it's taken in: the subjects of the
+ * student's own section, minus the ones they dropped, plus the ones they take in another section
+ * (College irregular students). `student.load` = { year, drops: [subject], adds: [{ class, subject }] }
+ * and only counts in the school year it was made for.
+ */
+export function studentSubjects(student, { subjects, sectionsById, year }) {
+  const own = sectionsById.get(student.class);
+  const load = student.load?.year === year ? student.load : null;
+  const drops = new Set(load?.drops || []);
+  const block = own ? subjects.filter((x) => offers(x, own) && !drops.has(x.name)).map((x) => ({ subject: x.name, class: own.id ?? own._id, added: false })) : [];
+  const adds = (load?.adds || []).filter((a) => !block.some((b) => b.subject === a.subject)).map((a) => ({ ...a, added: true }));
+  return [...block, ...adds];
+}
+
 /** The levels a subject is taught in, e.g. ["elementary", "junior_high"]. */
 export const subjectLevels = (subject) => [...new Set((subject.grades || []).map((g) => gradeOf(g)?.level).filter(Boolean))];
