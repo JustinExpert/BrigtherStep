@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { buildReport, termLabel, useScope } from "../lib/scope.js";
@@ -24,7 +24,21 @@ export default function Reports() {
   const [term, setTerm] = useState("Q2");
   // This class's grades and attendance for the school year load from the server when it's chosen.
   const view = useView(cls ? { view: "class", class: cls } : null);
-  const notReady = view.loading ? "Still loading this class — try again in a moment" : view.error;
+  // Class grades can also be shown for a closed school year (read-only, loaded when chosen).
+  const years = [school.academicYear, ...[...(school.pastYears || [])].reverse()];
+  const [yearKey, setYearKey] = useState(school.academicYear.key);
+  const isCurrent = yearKey === school.academicYear.key;
+  const yearLabel = (years.find((y) => y.key === yearKey) || school.academicYear).label;
+  const [past, setPast] = useState({ key: "", grades: [], error: "" });
+  const pastKey = `${yearKey}|${cls}`;
+  useEffect(() => {
+    if (isCurrent || tab !== "grades" || !cls) return undefined;
+    let live = true;
+    data.yearGrades(yearKey, null, cls).then((g) => live && setPast({ key: pastKey, grades: g, error: "" }), (e) => live && setPast({ key: pastKey, grades: [], error: e.message }));
+    return () => { live = false; };
+  }, [pastKey, isCurrent, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pastLoading = !isCurrent && tab === "grades" && past.key !== pastKey;
+  const notReady = view.loading || pastLoading ? "Still loading this class — try again in a moment" : view.error || (!isCurrent && tab === "grades" ? past.error : "");
 
   if (!scope.classes.length) {
     return (
@@ -50,8 +64,16 @@ export default function Reports() {
   const totals = att.reduce((t, r) => ({ P: t.P + r.P, A: t.A + r.A, L: t.L + r.L }), { P: 0, A: 0, L: 0 });
 
   // ----- Class grades: each student's published quarterly grade per subject -----
-  const reports = list.map((s) => ({ s, ...buildReport(s, data) }));
-  const subjectNames = reports[0]?.rows.map((r) => r.subject) || [];
+  const byId = new Map(students.map((s) => [s.id, s]));
+  const pastList = [...new Set(past.grades.map((g) => g.studentId))]
+    .map((id) => byId.get(id) || { id, name: id, roll: "—" }) // a student removed since then still shows by ID
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const reports = isCurrent
+    ? list.map((s) => ({ s, ...buildReport(s, data) }))
+    : pastList.map((s) => ({ s, ...buildReport(s, { ...data, grades: past.grades }, { past: true }) }));
+  // Every subject that appears, so each column lines up even when a student's subjects differ.
+  const subjectNames = [...new Set(reports.flatMap((r) => r.rows.map((x) => x.subject)))];
+  const cellOf = (r, subject) => r.rows.find((x) => x.subject === subject)?.terms[term] ?? null;
 
   const exportCsv = () => {
     if (notReady) return toast(notReady);
@@ -64,8 +86,8 @@ export default function Reports() {
       downloadCsv(`class-list-${base}.csv`, ["Roll", "Student", "ID", "Gender", "Date of birth", "Parent / guardian", "Phone", "Email", "Address"],
         list.map((s) => [s.roll, s.name, s.id, s.gender, s.dob, s.parent, s.phone, s.email, s.address]));
     } else {
-      downloadCsv(`grades-${termLabel(term).replace(/\s+/g, "-").toLowerCase()}-${base}.csv`, ["Roll", "Student", "ID", ...subjectNames, "General average"],
-        reports.map((r) => [r.s.roll, r.s.name, r.s.id, ...r.rows.map((x) => x.terms[term] ?? ""), avgOf(r.rows, term) ?? ""]));
+      downloadCsv(`grades-${yearKey}-${termLabel(term).replace(/\s+/g, "-").toLowerCase()}-${base}.csv`, ["Roll", "Student", "ID", ...subjectNames, "General average"],
+        reports.map((r) => [isCurrent ? r.s.roll : "", r.s.name, r.s.id, ...subjectNames.map((n) => cellOf(r, n) ?? ""), avgOf(r.rows, term) ?? ""]));
     }
     toast("CSV downloaded — open it in Excel or Google Sheets");
   };
@@ -97,6 +119,13 @@ export default function Reports() {
               <label>To<input className="input" type="date" value={to} min={from} max={todayIso()} onChange={(e) => e.target.value && setTo(e.target.value)} /></label>
             </>
           )}
+          {tab === "grades" && years.length > 1 && (
+            <label>School year
+              <select className="select" value={yearKey} onChange={(e) => setYearKey(e.target.value)}>
+                {years.map((y) => <option key={y.key} value={y.key}>{y.label}{y.key === school.academicYear.key ? " (current)" : ""}</option>)}
+              </select>
+            </label>
+          )}
           {tab === "grades" && (
             <label>Grading period
               <select className="select" value={term} onChange={(e) => setTerm(e.target.value)}>
@@ -111,7 +140,7 @@ export default function Reports() {
       <div className="card report-sheet">
         <div className="rc-head">
           <div>
-            <small>{school.name} · {school.academicYear.label}</small>
+            <small>{school.name} · {tab === "grades" ? yearLabel : school.academicYear.label}</small>
             <h2>{TABS.find(([k]) => k === tab)[1]} · {classLabel}</h2>
             <small>
               {tab === "attendance" ? `${fmtDate(from)} – ${fmtDate(to)} · ${days.length} school day(s) recorded`
@@ -167,12 +196,14 @@ export default function Reports() {
             <table className="report-table">
               <thead><tr><th className="no-sort">Roll</th><th className="no-sort">Student</th>{subjectNames.map((n) => <th key={n} className="no-sort">{n}</th>)}<th className="no-sort">Average</th></tr></thead>
               <tbody>
-                {reports.map((r) => {
+                {pastLoading && <tr><td colSpan={99} className="empty">Loading Class {cls} · {yearLabel}…</td></tr>}
+                {!pastLoading && !reports.length && <tr><td colSpan={99} className="empty">{!isCurrent && past.error ? past.error : `No published grades for Class ${cls} in ${yearLabel}.`}</td></tr>}
+                {!pastLoading && reports.map((r) => {
                   const avg = avgOf(r.rows, term);
                   return (
                     <tr key={r.s.id}>
-                      <td>{r.s.roll}</td><td><b>{r.s.name}</b></td>
-                      {r.rows.map((x) => <td key={x.subject} className={x.terms[term] !== null && x.terms[term] < school.passingMark ? "text-red" : ""}>{x.terms[term] ?? "—"}</td>)}
+                      <td>{isCurrent ? r.s.roll : "—"}</td><td><b>{r.s.name}</b></td>
+                      {subjectNames.map((n) => { const v = cellOf(r, n); return <td key={n} className={v !== null && v < school.passingMark ? "text-red" : ""}>{v ?? "—"}</td>; })}
                       <td>{avg === null ? "—" : <Badge value={`${avg} · ${gradeFor(school, avg).grade}`} cls={avg >= school.passingMark ? "b-green" : "b-red"} />}</td>
                     </tr>
                   );

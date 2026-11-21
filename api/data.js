@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const params = new URL(req.url, "http://x").searchParams;
       if (params.get("backup")) return send(res, 200, { ok: true, backup: await exportBackup(user) });
-      if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year"), params.get("student")) });
+      if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year"), params.get("student"), params.get("class")) });
       if (params.get("view")) return send(res, 200, { ok: true, ...(await loadView(user, params)) });
       return send(res, 200, { ok: true, data: await bootstrap(user) });
     }

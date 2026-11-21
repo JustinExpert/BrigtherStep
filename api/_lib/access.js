@@ -107,9 +107,10 @@ export function gradeFilter(ctx, user) {
 }
 
 /** One school year's grades this user may read (used for report cards of past years). */
-export async function gradesForYear(user, year, studentId) {
+export async function gradesForYear(user, year, studentId, cls) {
   if (typeof year !== "string" || !/^\d{4}-\d{4}$/.test(year)) bad("Invalid school year.");
   if (studentId !== null && studentId !== undefined && (typeof studentId !== "string" || !studentId.startsWith("STU-") || studentId.length > 40)) bad("Invalid student.");
+  if (cls !== null && cls !== undefined && !CLASSES.includes(cls)) bad("Invalid class.");
   const ctx = await context(user);
   let filter = gradeFilter(ctx, user);
   // In a past year the student was in another class, so a teacher's access follows the students
@@ -119,8 +120,9 @@ export async function gradesForYear(user, year, studentId) {
     filter = { studentId: { $in: mine.map((s) => s._id) } };
   }
   if (!filter) return [];
-  const one = studentId ? { studentId } : {}; // a report card asks for one student
-  return (await ctx.db.collection("grades").find({ $and: [filter, { year, ...one }] }).toArray()).map(toClient);
+  // A report card asks for one student; a class report for the class as it was that year.
+  const narrow = { ...(studentId ? { studentId } : {}), ...(cls ? { class: cls } : {}) };
+  return (await ctx.db.collection("grades").find({ $and: [filter, { year, ...narrow }] }).toArray()).map(toClient);
 }
 
 /** Grades and activities can only be changed in the open school year; past years are read-only. */

@@ -146,7 +146,7 @@ export function DataProvider({ children }) {
     },
     /** Published grades of a past school year that this user may see (loaded on request, read-only). */
     /** One student's grades in a past school year (or every grade this user may see, without a student). */
-    yearGrades: async (year, studentId) => (await api(`data?${new URLSearchParams(studentId ? { year, student: studentId } : { year })}`)).grades,
+    yearGrades: async (year, studentId, cls) => (await api(`data?${new URLSearchParams({ year, ...(studentId && { student: studentId }), ...(cls && { class: cls }) })}`)).grades,
     /**
      * Closes the open school year and starts the next ({ label, start, end, promote }).
      * Throws the server's message if it's refused. Resolves to { promoted, graduated }.
