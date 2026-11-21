@@ -248,7 +248,7 @@ async function mutate(user, body) {
       if (user.role !== "superadmin") deny("Only the Super Admin can reset the demo data.");
       await replaceAll(db, {
         rows: Object.fromEntries(COLLECTIONS.map((c) => [c, c === "users" ? SEED.users : DATA[c]])),
-        attendance: {}, school: SEED.school, permissions: DEFAULT_PERMISSIONS, routine: DATA.routine,
+        attendance: DATA.attendance, school: SEED.school, permissions: DEFAULT_PERMISSIONS, routine: DATA.routine,
       });
       return {};
 

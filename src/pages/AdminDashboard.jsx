@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useData } from "../lib/DataContext.jsx";
-import { DATA } from "../constants.js";
+import { monthlyAttendance, pct } from "../lib/stats.js";
+import { useStudentStats } from "../lib/useStudentStats.js";
 import { compact, relTime } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -25,12 +26,19 @@ export function NoticeFeed({ notices, limit = 4 }) {
 }
 
 export default function AdminDashboard() {
-  const { students, teachers, notices, classes } = useData();
+  const { students, teachers, notices, classes, attendance, school } = useData();
   const navigate = useNavigate();
+  const stats = useStudentStats();
   const male = students.filter((s) => s.gender === "Male").length;
   const parents = new Set(students.map((s) => s.parent)).size;
-  const stars = [...students].sort((a, b) => b.marks - a.marks).slice(0, 5);
-  const { labels, students: sAtt, teachers: tAtt } = DATA.attendanceChart;
+  // Top 5 by general average of this year's published grades.
+  const stars = students
+    .map((s) => ({ ...s, average: stats.get(s.id)?.average ?? null, attendanceRate: stats.get(s.id)?.attendance.rate ?? null }))
+    .filter((s) => s.average !== null)
+    .sort((a, b) => b.average - a.average || a.name.localeCompare(b.name))
+    .slice(0, 5);
+  const chart = monthlyAttendance(attendance, school.academicYear);
+  const hasAttendance = chart.values.some((v) => v !== null);
 
   return (
     <>
@@ -47,13 +55,12 @@ export default function AdminDashboard() {
       <div className="grid-main">
         <div className="card">
           <div className="card-head">
-            <div><h3>Attendance Overview</h3><p>Students &amp; Teachers, monthly average</p></div>
-            <div className="legend"><span><i style={{ background: "#7b2cdf" }} />Teacher</span><span><i style={{ background: "#ff7a3d" }} />Student</span></div>
+            <div><h3>Attendance Overview</h3><p>Students present (incl. late), monthly · S.Y. {school.academicYear.label}</p></div>
+            <div className="legend"><span><i style={{ background: "#7b2cdf" }} />Students</span></div>
           </div>
-          <GroupedBarChart labels={labels} series={[
-            { key: "t", label: "Teachers", color: "#7b2cdf", values: tAtt },
-            { key: "s", label: "Students", color: "#ff7a3d", values: sAtt },
-          ]} />
+          {hasAttendance
+            ? <GroupedBarChart labels={chart.labels} series={[{ key: "s", label: "Students", color: "#7b2cdf", values: chart.values }]} />
+            : <p className="empty">No attendance has been recorded this school year yet. It appears here as teachers take attendance.</p>}
         </div>
         <div className="card">
           <div className="card-head"><h3>Students</h3><button className="icon-btn" onClick={() => navigate("/students")} aria-label="Open students"><Icon name="more" /></button></div>
@@ -69,13 +76,12 @@ export default function AdminDashboard() {
         <DataTable
           title="Star Students"
           rows={stars}
-          selectable
           cols={[
             { key: "name", label: "Name", render: (r) => <div className="who"><Avatar name={r.name} color={r.color} />{r.name}</div> },
-            { key: "id", label: "ID", render: (r) => r.id.replace("STU-", "PRE") },
-            { key: "marks", label: "Marks" },
-            { key: "percent", label: "Percent", render: (r) => r.percent + "%" },
-            { key: "admittedYear", label: "Admitted" },
+            { key: "id", label: "ID" },
+            { key: "class", label: "Class" },
+            { key: "average", label: "Average", render: (r) => <b>{r.average}</b> },
+            { key: "attendanceRate", label: "Attendance", render: (r) => pct(r.attendanceRate) },
           ]}
           actions={{ onView: (r) => navigate(`/students/${r.id}`) }}
         />

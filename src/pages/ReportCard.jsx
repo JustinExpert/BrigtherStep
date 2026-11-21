@@ -6,7 +6,7 @@ import { TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
-import { attendanceLog, MissingRecord } from "./StudentDashboard.jsx";
+import { attendanceLog, attendanceRate, MissingRecord } from "./StudentDashboard.jsx";
 import { useMyChildren } from "./ParentDashboard.jsx";
 
 /** Printable report card built from published grades only. */
@@ -94,7 +94,7 @@ export function ReportCardView({ student, showPrint = true }) {
       <p className="hint" style={{ marginTop: 12 }}>
         Only published grades are shown; "—" means not graded or not published yet. Final = average of published quarters.
         {isCurrent
-          ? <>Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late (term average {student.attendance}%).</>
+          ? <>Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late ({log.length ? `${attendanceRate(log)}% attendance` : "nothing recorded yet"}).</>
           : <>This is a closed school year, so these grades can no longer be changed. Teachers shown are the ones who entered the grades.</>}
       </p>
     </div>

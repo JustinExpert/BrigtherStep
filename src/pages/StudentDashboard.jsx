@@ -3,6 +3,7 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { DATA } from "../constants.js";
 import { fmtDate } from "../lib/utils.js";
+import { pct } from "../lib/stats.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
@@ -27,13 +28,16 @@ export function classSubjects(routine, cls, assignments, teachers) {
   return subjectsOf(routine, cls).map((subject) => ({ subject, teacher: teacherFor(assignments, teachers, cls, subject) }));
 }
 
-/** Attendance marks saved by teachers for one student, newest first. */
+/** Attendance marks saved by teachers for one student this school year, newest first. */
 export function attendanceLog(attendance, student) {
   return Object.entries(attendance)
-    .filter(([key, marks]) => key.startsWith(student.class + "|") && marks[student.id])
+    .filter(([, marks]) => marks[student.id])
     .map(([key, marks]) => ({ date: key.split("|")[1], status: marks[student.id] }))
     .sort((a, b) => b.date.localeCompare(a.date));
 }
+
+/** Present + late as a % of recorded days (null when nothing is recorded). */
+export const attendanceRate = (log) => (log.length ? Math.round((log.filter((r) => r.status !== "A").length / log.length) * 100) : null);
 
 export default function StudentDashboard() {
   const me = useMyRecord();
@@ -64,7 +68,7 @@ export function StudentOverview({ me, parentView = false }) {
           Class {me.class}{section && `-${section}`} · Roll {me.roll}{classTeacher && <> · Class teacher: <b>{classTeacher.name}</b></>} · {school.academicYear.label}
         </p>
         <div className="stat-grid">
-          <StatTile label="Attendance (term)" value={me.attendance + "%"} icon="list" tone="purple" />
+          <StatTile label="Attendance (this year)" value={pct(attendanceRate(log))} icon="list" tone="purple" />
           <StatTile label={grade ? `General Average · ${grade.remark}` : "General Average"} value={grade ? `${average} · ${grade.grade}` : "—"} icon="exam" tone="blue" />
           <StatTile label="Subjects" value={subjects.length} icon="subject" tone="orange" />
           <StatTile label="Classes today" value={today.length} icon="calendar" tone="green" />
@@ -113,7 +117,7 @@ export function StudentOverview({ me, parentView = false }) {
                 </div>
               ))}
             </div>
-          ) : <p className="empty">No attendance has been recorded yet. The term average is {me.attendance}%.</p>}
+          ) : <p className="empty">No attendance has been recorded yet this school year.</p>}
         </div>
         <div className="card">
           <div className="card-head"><h3>Announcements</h3><Link className="link" to="/notice">View all</Link></div>

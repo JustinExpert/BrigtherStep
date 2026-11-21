@@ -43,6 +43,12 @@ try {
     { _id: "routine", value: DATA.routine },
   ]);
   await db.collection("attendance").createIndex({ class: 1, date: 1 }, { unique: true });
+  // Sample attendance: every school day of the first year up to the demo's "today".
+  const attendance = Object.entries(DATA.attendance).map(([key, marks]) => {
+    const [cls, date] = key.split("|");
+    return { _id: key, class: cls, date, marks, year: SEED.school.academicYear.key };
+  });
+  if (attendance.length) await db.collection("attendance").insertMany(attendance);
 
   // Indexes for the queries the app makes (and one unique rule: one account per email).
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
@@ -60,7 +66,7 @@ try {
   console.log(`Loaded ${total} records into "${dbName}":`);
   for (const [c, n] of Object.entries(counts)) console.log(`  ${c.padEnd(12)} ${n}`);
   console.log("  settings     3 (school, permissions, routine)");
-  console.log("  attendance   0 (filled as teachers take attendance)");
+  console.log(`  attendance   ${attendance.length} (sample school days)`);
 } catch (e) {
   console.log("SEED FAILED: " + redact(e?.message || e));
   process.exitCode = 1;

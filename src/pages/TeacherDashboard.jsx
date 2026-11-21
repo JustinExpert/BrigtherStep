@@ -3,6 +3,7 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { DATA } from "../constants.js";
 import { teacherWeek, useScope, useVisibleNotices } from "../lib/scope.js";
+import { useStudentStats } from "../lib/useStudentStats.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 
@@ -11,6 +12,7 @@ export default function TeacherDashboard() {
   const { students, teachers, grades, assignments, routine } = useData();
   const notices = useVisibleNotices();
   const scope = useScope();
+  const stats = useStudentStats();
   // Admins previewing this page see the first teacher's view.
   const me = teachers.find((t) => t.id === user.teacherId) || (user.role !== "teacher" ? teachers[0] : null);
   if (!me) return <div className="card empty">Your account isn't linked to a staff record yet. Please ask the school admin.</div>;
@@ -22,7 +24,9 @@ export default function TeacherDashboard() {
   const today = teacherWeek(routine, assignments, me.id)[dayIdx];
   const periodsOf = (a) => routine[a.class].flat().filter((s) => s.subject === a.subject).length;
   const drafts = grades.filter((g) => !g.published && mine.some((a) => a.class === g.class && a.subject === g.subject)).length;
-  const attention = myStudents.filter((s) => s.attendance < 88);
+  // Students whose recorded attendance this school year is under 88%, lowest first.
+  const rateOf = (s) => stats.get(s.id)?.attendance.rate ?? null;
+  const attention = myStudents.filter((s) => rateOf(s) !== null && rateOf(s) < 88).sort((a, b) => rateOf(a) - rateOf(b));
 
   return (
     <>
@@ -80,7 +84,7 @@ export default function TeacherDashboard() {
           <div className="feed">
             {attention.slice(0, 6).map((s) => (
               <div className="feed-item" key={s.id}>
-                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Class {s.class} · attendance {s.attendance}%</p></div>
+                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Class {s.class} · attendance {rateOf(s)}% ({stats.get(s.id).attendance.absent} absent)</p></div>
                 <time><Badge value="Below 88%" cls="b-red" /></time>
               </div>
             ))}

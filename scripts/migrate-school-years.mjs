@@ -3,7 +3,7 @@
 //   activities  + `year`
 //   attendance  + `year` (from the school year whose dates contain the day)
 //   notices     + `year` (from the date posted)
-//   students    `year` (admission year) → `admittedYear`; leftover `_r` removed
+//   students    `year` (admission year) → `admittedYear`; sample-only `_r`, `marks`, `percent`, `attendance` removed
 //   settings    school.academicYear.key and school.pastYears
 //
 // Run: npm run db:migrate-years
@@ -33,7 +33,9 @@ try {
   const activities = await db.collection("activities").find(noYear).toArray();
   const attendance = await db.collection("attendance").find(noYear).toArray();
   const notices = await db.collection("notices").find(noYear).toArray();
-  const students = await db.collection("students").find({ $or: [{ _r: { $exists: true } }, { year: { $exists: true } }] }).toArray();
+  // Sample-only numbers that were never real records (real figures are now calculated from grades and attendance).
+  const FAKE = ["_r", "marks", "percent", "attendance"];
+  const students = await db.collection("students").find({ $or: [...FAKE, "year"].map((f) => ({ [f]: { $exists: true } })) }).toArray();
   const needsSettings = !school.academicYear.key || !Array.isArray(school.pastYears);
 
   if (!grades.length && !activities.length && !attendance.length && !notices.length && !students.length && !needsSettings) {
@@ -72,9 +74,9 @@ try {
     // `year` on a student was the admission year; it's renamed so it can't be mistaken for the school year.
     await db.collection("students").bulkWrite(students.map((s) => ({ updateOne: {
       filter: { _id: s._id },
-      update: { $unset: { _r: "", year: "" }, ...(s.year !== undefined && s.admittedYear === undefined ? { $set: { admittedYear: s.year } } : {}) },
+      update: { $unset: Object.fromEntries([...FAKE, "year"].map((f) => [f, ""])), ...(s.year !== undefined && s.admittedYear === undefined ? { $set: { admittedYear: s.year } } : {}) },
     } })));
-    console.log(`Students tidied (admission year renamed, leftover field removed): ${students.length}`);
+    console.log(`Students tidied (admission year renamed; sample-only marks/percent/attendance removed): ${students.length}`);
   }
   // Index replaced by the year-first one the server creates.
   await db.collection("notices").dropIndex("audience_1").then(() => console.log("Dropped unused index notices.audience_1"), () => {});

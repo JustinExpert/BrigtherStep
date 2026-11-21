@@ -78,7 +78,7 @@ export function GroupedBarChart({ labels, series, max = 100, unit = "%" }) {
       {tip && (
         <div className="chart-tip" style={{ left: tip.x + 14, top: tip.y - 50 }}>
           <b>{labels[tip.i]}</b>
-          {series.map((s) => <div key={s.key}>{s.label}: {s.values[tip.i] ? s.values[tip.i] + unit : "No school"}</div>)}
+          {series.map((s) => <div key={s.key}>{s.label}: {s.values[tip.i] === null || s.values[tip.i] === undefined ? "No records" : s.values[tip.i] + unit}</div>)}
         </div>
       )}
     </>

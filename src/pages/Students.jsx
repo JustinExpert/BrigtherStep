@@ -10,6 +10,8 @@ import RecordForm from "../components/RecordForm.jsx";
 import { Avatar, Badge, PageHead } from "../components/ui.jsx";
 import { buildReport, useScope } from "../lib/scope.js";
 import { ReportCardView } from "./ReportCard.jsx";
+import { attendanceLog, attendanceRate } from "./StudentDashboard.jsx";
+import { pct } from "../lib/stats.js";
 
 export const STUDENT_FIELDS = [
   { key: "name", label: "Full name", required: true },
@@ -24,7 +26,7 @@ export const STUDENT_FIELDS = [
 ];
 
 const newStudentDefaults = () => ({
-  marks: 0, percent: 0, attendance: 100, admittedYear: new Date().getFullYear(),
+  admittedYear: new Date().getFullYear(),
   color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
 });
 
@@ -116,7 +118,7 @@ export function StudentDetails({ selfId }) {
           <span style={{ color: "var(--muted)" }}>{s.id} · Class {s.class} · Roll {s.roll}</span>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
-            <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{s.attendance}%</b></div></div>
+            <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{pct(attendanceRate(attendanceLog(data.attendance, s)))}</b></div></div>
             <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>General avg.</span><b style={{ fontSize: 22 }}>{average ?? "—"}</b></div></div>
           </div>
         </div>

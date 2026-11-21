@@ -1,7 +1,7 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
-import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS, attendanceChart } from "./constants.js";
+import { AVATAR_COLORS, CLASSES, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS } from "./constants.js";
 
 export { AVATAR_COLORS, CLASSES, STRANDS, SUBJECTS, TERMS };
 const school = structuredClone(DEFAULT_SCHOOL);
@@ -150,7 +150,31 @@ assignments.forEach((a) => {
   });
 });
 
-export const DATA = { students, teachers, notices, classes, subjects, routine, attendanceChart, DAYS, PERIODS, assignments, grades, activities };
+// ---------- Attendance (school days from the start of the year to the demo's "today") ----------
+// Uses its own random sequence so all the sample data above stays exactly the same.
+let aSeed = 7;
+const aRnd = () => (aSeed = (aSeed * 9301 + 49297) % 233280) / 233280;
+const DEMO_TODAY = "2026-11-20";
+const attendance = {}; // { "class|date": { studentId: "P" | "A" | "L" } }
+const habit = Object.fromEntries(students.map((s) => [s.id, 0.02 + aRnd() * 0.12])); // how often each student is absent
+for (let d = new Date(`${DEFAULT_SCHOOL.academicYear.start}T12:00:00Z`); d.toISOString().slice(0, 10) <= DEMO_TODAY; d.setUTCDate(d.getUTCDate() + 1)) {
+  if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue; // weekends
+  const date = d.toISOString().slice(0, 10);
+  for (const cls of CLASSES) {
+    const marks = {};
+    for (const s of students.filter((x) => x.class === cls)) {
+      const r = aRnd();
+      marks[s.id] = r < habit[s.id] ? "A" : r < habit[s.id] + 0.04 ? "L" : "P";
+    }
+    if (Object.keys(marks).length) attendance[`${cls}|${date}`] = marks;
+  }
+}
+
+// The generator's internal numbers (marks, percent, attendance) shaped the sample grades above;
+// they're not real records, so they aren't stored. Real figures are calculated from grades and attendance.
+const studentRecords = students.map(({ marks, percent, attendance: _att, ...s }) => s);
+
+export const DATA = { students: studentRecords, teachers, notices, classes, subjects, routine, DAYS, PERIODS, assignments, grades, activities, attendance };
 
 // ---------- User accounts ----------
 // Passwords are stored only as PBKDF2 hashes (see seedHashes.js). Demo passwords are shown on the login page.

@@ -59,7 +59,7 @@ try {
   for (const s of students) {
     if (!validClass(s.class) && s.class !== GRADUATED) problem("students", "class is not a known class", `${s._id}: ${s.class}`);
     if (!s.name?.trim()) problem("students", "missing name", s._id);
-    if ("_r" in s) problem("students", "leftover internal field _r", s._id);
+    for (const f of ["_r", "marks", "percent", "attendance"]) if (f in s) problem("students", `sample-only field "${f}" (not a real record)`, s._id);
     if ("year" in s) problem("students", "old field `year` (admission year) — should be admittedYear", s._id);
     if (s.class === GRADUATED && !knownYears.has(s.graduatedYear)) problem("students", "graduated without a known graduation year", s._id);
   }
