@@ -30,7 +30,8 @@ export function ReportCardView({ student, showPrint = true }) {
   const loading = !isCurrent && past.key !== yearKey;
   const year = years.find((y) => y.key === yearKey) || school.academicYear;
 
-  const { rows, average, cls } = isCurrent ? buildReport(student, data) : buildReport(student, { ...data, grades: past.grades }, { past: true });
+  const report = isCurrent ? buildReport(student, data) : buildReport(student, { ...data, grades: past.grades }, { past: true });
+  const { rows, average, cls } = report;
   const shownClass = cls || student.class;
   const sections = useSections();
   const shownSection = sections.byId.get(shownClass);
@@ -60,6 +61,7 @@ export function ReportCardView({ student, showPrint = true }) {
       </div>
       {loading && <p className="hint" role="status">Loading {year.label} grades…</p>}
       {past.error && !isCurrent && <div className="alert error" role="alert">{past.error}</div>}
+      {report.college ? <CollegeTables report={report} /> : (
       <div className="table-wrap">
         <table className="rc-table">
           <thead>
@@ -93,13 +95,60 @@ export function ReportCardView({ student, showPrint = true }) {
           </tfoot>
         </table>
       </div>
+      )}
       <p className="hint" style={{ marginTop: 12 }}>
-        Only published grades are shown; "—" means not graded or not published yet. Final = average of published quarters.
+        Only published grades are shown; "—" means not graded or not published yet.{" "}
+        {report.college
+          ? "Final = average of Prelim, Midterm and Finals, converted to the 1.00–5.00 scale (3.00 passing). GWA = units-weighted average; INC and DRP don't count. "
+          : "Final = average of published quarters. "}
         {isCurrent
           ? <>Attendance this year: {count("P")} present, {count("A")} absent, {count("L")} late ({log.length ? `${attendanceRate(log)}% attendance` : "nothing recorded yet"}).</>
           : <>This is a closed school year, so these grades can no longer be changed. Teachers shown are the ones who entered the grades.</>}
       </p>
     </div>
+  );
+}
+
+/** College report card: one table per semester with units, Prelim / Midterm / Finals, final grade and GWA. */
+function CollegeTables({ report }) {
+  const cell = (v) => (v === null || v === undefined ? <span className="muted">—</span> : v);
+  const remark = (r) => (r.mark === "INC" ? "Incomplete" : r.mark === "DRP" ? "Dropped" : r.cgrade ? (r.cgrade.passed ? "Passed" : "Failed") : "—");
+  return (
+    <>
+      {report.semesters.map((sem) => (
+        <div className="table-wrap" key={sem.key} style={{ marginBottom: 16 }}>
+          <table className="rc-table">
+            <thead>
+              <tr><th className="no-sort" colSpan={9}>{sem.label}</th></tr>
+              <tr>
+                <th className="no-sort">Code</th><th className="no-sort">Subject</th><th className="no-sort">Units</th>
+                {["Prelim", "Midterm", "Finals"].map((x) => <th key={x} className="no-sort">{x}</th>)}
+                <th className="no-sort">Final %</th><th className="no-sort">Grade</th><th className="no-sort">Remark</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sem.rows.map((r) => (
+                <tr key={r.subject}>
+                  <td>{r.code || "—"}</td><td><b>{r.subject}</b><small className="muted" style={{ display: "block" }}>{r.teacher}</small></td><td>{r.units}</td>
+                  {r.periods.map((t) => <td key={t.key}>{cell(r.terms[t.key])}</td>)}
+                  <td>{cell(r.final)}</td>
+                  <td>{r.mark ? <Badge value={r.mark} cls="b-amber" /> : r.cgrade ? <Badge value={r.cgrade.grade} cls={r.cgrade.passed ? "b-green" : "b-red"} /> : "—"}</td>
+                  <td>{remark(r)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2}><b>Semester GWA</b></td><td><b>{sem.units}</b></td><td colSpan={4} />
+                <td><b>{sem.gwa === null ? "—" : sem.gwa.toFixed(2)}</b></td><td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ))}
+      {!report.semesters.length && <div className="card empty">No subjects yet.</div>}
+      {report.semesters.length > 1 && <p><b>School year GWA: {report.gwa === null ? "—" : report.gwa.toFixed(2)}</b></p>}
+    </>
   );
 }
 

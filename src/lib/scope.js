@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { useData } from "./DataContext.jsx";
 import { ADMINS } from "./permissions.js";
-import { DATA, TERMS, termLabel } from "../constants.js";
+import { DATA, SEMESTERS, termLabel, termsFor } from "../constants.js";
+import { collegeGrade, gwa } from "./gradeCalc.js";
 import { bySchoolOrder } from "../levels.js";
 
 /**
@@ -95,24 +96,44 @@ export { termLabel };
  * rows: [{ subject, teacher, terms: { Q1: 88, … }, final }], general average, and the class the grades were for.
  * `past: true` is for a closed school year: the student may have been in another class then, so subjects,
  * class and teachers come from the grades themselves instead of this year's teaching assignments.
+ *
+ * College (the section's level): each row also has units, semester, its grading periods (Prelim / Midterm /
+ * Finals), the 1.00–5.00 grade (`cgrade`) and `mark` (INC / DRP); `semesters` groups the rows with a GWA each,
+ * and `gwa` is the units-weighted average of the whole year.
  */
-export function buildReport(student, { grades, assignments, teachers }, { past = false } = {}) {
+export function buildReport(student, { grades, assignments, teachers, subjects = [], classes = [], school }, { past = false } = {}) {
   const mine = grades.filter((g) => g.studentId === student.id && g.published);
-  const subjects = past
+  const cls = past ? mine[0]?.class : student.class;
+  const level = classes.find((c) => c.id === cls)?.level;
+  const college = level === "college";
+  const names = past
     ? [...new Set(mine.map((g) => g.subject))].sort()
     : assignments.filter((a) => a.class === student.class).map((a) => a.subject);
   const teacherName = (subject) => (past
     ? teachers.find((t) => t.id === mine.find((g) => g.subject === subject)?.updatedBy)?.name || "—"
     : teacherFor(assignments, teachers, student.class, subject));
-  const rows = subjects.map((subject) => {
-    const terms = Object.fromEntries(TERMS.map((t) => [t.key, mine.find((g) => g.subject === subject && g.term === t.key)?.score ?? null]));
-    const scores = Object.values(terms).filter((v) => v !== null);
-    return {
-      subject, teacher: teacherName(subject), terms,
-      final: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
-    };
+  const rows = names.map((subject) => {
+    const info = subjects.find((x) => x.name === subject);
+    const periods = termsFor(level, info);
+    const got = (t) => mine.find((g) => g.subject === subject && g.term === t);
+    const terms = Object.fromEntries(periods.map((t) => [t.key, got(t.key)?.score ?? null]));
+    const scores = Object.values(terms).filter((v) => v !== null && v !== undefined);
+    const final = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+    const row = { subject, teacher: teacherName(subject), terms, final };
+    if (!college) return row;
+    const marks = periods.map((t) => got(t.key)?.remark).filter(Boolean);
+    const mark = marks.includes("DRP") ? "DRP" : marks.includes("INC") ? "INC" : null;
+    // A subject's college grade needs all its periods published (or an INC / DRP mark instead).
+    const complete = scores.length === periods.length;
+    return { ...row, code: info?.code || "", units: info?.units ?? 0, semester: info?.semester || 1, periods, mark,
+      cgrade: mark || !complete ? null : collegeGrade(school, final) };
   });
   const finals = rows.map((r) => r.final).filter((v) => v !== null);
-  const average = finals.length ? Math.round((finals.reduce((a, b) => a + b, 0) / finals.length) * 10) / 10 : null;
-  return { rows, average, cls: past ? mine[0]?.class : student.class };
+  const average = college ? null : finals.length ? Math.round((finals.reduce((a, b) => a + b, 0) / finals.length) * 10) / 10 : null;
+  if (!college) return { rows, average, cls };
+  const semesters = SEMESTERS.map((sem) => {
+    const r = rows.filter((x) => x.semester === sem.key);
+    return { ...sem, rows: r, units: r.reduce((n, x) => n + Number(x.units || 0), 0), gwa: gwa(r) };
+  }).filter((x) => x.rows.length);
+  return { rows, average, cls, college, semesters, gwa: gwa(rows) };
 }

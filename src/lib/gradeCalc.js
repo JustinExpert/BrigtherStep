@@ -7,6 +7,16 @@ export const COMPONENTS = [
   { key: "QA", label: "Quarterly Assessment", short: "QA", hint: "End-of-quarter exam" },
 ];
 
+/** College names the same three components after what college teachers record. Keys stay WW / PT / QA. */
+const COLLEGE_LABELS = {
+  WW: ["Class Standing", "CS", "Quizzes, recitation, seatwork, attendance"],
+  PT: ["Requirements", "REQ", "Projects, reports, laboratory work"],
+  QA: ["Major Exam", "EXAM", "Prelim, midterm or final exam"],
+};
+export const componentsFor = (level) => (level === "college"
+  ? COMPONENTS.map((c) => { const [label, short, hint] = COLLEGE_LABELS[c.key]; return { ...c, label, short, hint }; })
+  : COMPONENTS);
+
 const w = (WW, PT, QA) => ({ WW, PT, QA });
 /** Default weights (%) by subject. Editable per school in School Setup. */
 export const DEFAULT_WEIGHTS = {
@@ -77,7 +87,24 @@ export function transmute(initial) {
  * The quarterly grade shown to students: the transmuted grade when the school uses the DepEd
  * table, otherwise the weighted percentage rounded to a whole number.
  */
-export const reportGrade = (grade, school) => (grade === null ? null : school?.transmutation ? transmute(grade) : Math.round(grade));
+export const reportGrade = (grade, school, level) => (grade === null ? null : school?.transmutation && level !== "college" ? transmute(grade) : Math.round(grade));
+
+/**
+ * College: a percentage on the school's 1.00–5.00 scale → { grade: "2.00", passed }.
+ * 3.00 or better passes; 5.00 fails.
+ */
+export function collegeGrade(school, percent) {
+  if (percent === null || percent === undefined) return null;
+  const row = [...(school?.collegeScale || [])].sort((a, b) => b.min - a.min).find((r) => percent >= r.min);
+  return row ? { grade: row.grade, passed: Number(row.grade) <= 3 } : null;
+}
+
+/** Units-weighted average of college grades (1.00–5.00): GWA = Σ(grade × units) ÷ Σunits. */
+export function gwa(rows) {
+  const counted = rows.filter((r) => r.cgrade && Number(r.units) > 0);
+  const units = counted.reduce((n, r) => n + Number(r.units), 0);
+  return units ? Math.round((counted.reduce((n, r) => n + Number(r.cgrade.grade) * Number(r.units), 0) / units) * 100) / 100 : null;
+}
 
 /** DepEd descriptors with passing mark 75 — applied by "Use DepEd grading" in School Setup. */
 export const DEPED_SCALE = [

@@ -7,13 +7,12 @@ export const LEVELS = [
   { key: "elementary", label: "Elementary", grades: [1, 2, 3, 4, 5, 6].map((n) => [`G${n}`, `Grade ${n}`]) },
   { key: "junior_high", label: "Junior High", grades: [7, 8, 9, 10].map((n) => [`G${n}`, `Grade ${n}`]) },
   { key: "senior_high", label: "Senior High", grades: [["G11", "Grade 11"], ["G12", "Grade 12"]], strands: true },
-  // College: block sections per program and year level, subjects with units and a semester.
-  // Not offered to schools (vendor page) until its gradebook and report card are finished.
-  { key: "college", label: "College", grades: [["Y1", "1st Year"], ["Y2", "2nd Year"], ["Y3", "3rd Year"], ["Y4", "4th Year"], ["Y5", "5th Year"]], programs: true, available: false },
+  // College: block sections per program and year level, subjects with units and a semester, 1.00–5.00 grades.
+  { key: "college", label: "College", grades: [["Y1", "1st Year"], ["Y2", "2nd Year"], ["Y3", "3rd Year"], ["Y4", "4th Year"], ["Y5", "5th Year"]], programs: true },
 ].map((l) => ({ ...l, available: l.available !== false, grades: l.grades.map(([key, label]) => ({ key, label, level: l.key })) }));
 
 export const LEVEL_KEYS = LEVELS.map((l) => l.key);
-/** Every K–12 level that can be switched on today (College comes with its own module). */
+/** Every level that can be switched on (the demo's default when the vendor hasn't chosen). */
 export const DEFAULT_LEVELS = LEVELS.filter((l) => l.available).map((l) => l.key);
 export const levelOf = (key) => LEVELS.find((l) => l.key === key);
 

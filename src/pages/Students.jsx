@@ -174,7 +174,7 @@ export function StudentDetails({ selfId }) {
   }
   const section = sections.byId.get(s.class);
   const adviser = teachers.find((t) => t.id === section?.adviser);
-  const { average } = buildReport(s, data);
+  const { average, college, gwa } = buildReport(s, data);
   // This year's moves, newest first (from the student view for staff, or the student's own data).
   const history = (view.data?.enrollments || enrollments.filter((e) => e.studentId === s.id))
     .filter((e) => e.year === school.academicYear.key).sort((a, b) => b.from.localeCompare(a.from));
@@ -205,7 +205,7 @@ export function StudentDetails({ selfId }) {
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
             <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : pct(attendanceRate(attendanceLog(data.attendance, s)))}</b></div></div>
-            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>General avg.</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : average ?? "—"}</b></div></div>
+            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>{college ? "GWA" : "General avg."}</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : (college ? gwa?.toFixed(2) : average) ?? "—"}</b></div></div>
           </div>
         </div>
         <div className="card">

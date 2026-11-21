@@ -4,7 +4,7 @@ import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
-import { COMPONENTS, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
+import { COMPONENTS, collegeGrade, componentsFor, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
 import { gradeId, termsFor } from "../constants.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
@@ -20,7 +20,7 @@ const ORDER = Object.fromEntries(COMPONENTS.map((c, i) => [c.key, i]));
 const fmt = (n) => (n === null || n === undefined ? "—" : Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** Add / edit an activity (title, component, max score, date). */
-function ActivityForm({ initial, onSave, onCancel, minMax = 1 }) {
+function ActivityForm({ initial, onSave, onCancel, minMax = 1, components = COMPONENTS }) {
   const [f, setF] = useState(() => ({ title: "", component: "WW", maxScore: 20, date: todayIso(), ...initial }));
   const [error, setError] = useState("");
   const submit = (e) => {
@@ -38,12 +38,12 @@ function ActivityForm({ initial, onSave, onCancel, minMax = 1 }) {
         <label style={{ gridColumn: "1 / -1" }}>Title *<input className="input" required maxLength={60} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. Quiz 3, Science Project" /></label>
         <label>Component
           <Select value={f.component} onChange={(v) => setF({ ...f, component: v })} aria-label="Component"
-            options={COMPONENTS.map((c) => ({ value: c.key, label: c.label }))} />
+            options={components.map((c) => ({ value: c.key, label: c.label }))} />
         </label>
         <label>Highest possible score *<input className="input" type="number" min="1" max="1000" required value={f.maxScore} onChange={(e) => setF({ ...f, maxScore: e.target.value })} /></label>
         <label>Date<DateInput value={f.date} onChange={(v) => setF({ ...f, date: v })} aria-label="Activity date" /></label>
       </div>
-      <p className="hint">{COMPONENTS.find((c) => c.key === f.component)?.hint}</p>
+      <p className="hint">{components.find((c) => c.key === f.component)?.hint}</p>
       <div className="form-actions">
         <button type="button" className="btn light" onClick={onCancel}>Cancel</button>
         <button className="btn">{initial ? "Save activity" : "Add activity"}</button>
@@ -68,12 +68,13 @@ export default function Gradebook() {
   const [termPick, setTerm] = useState("Q2");
   const { subjects } = useData();
   const [edits, setEdits] = useState({}); // { activityId: { studentId: "typed value" } }
+  const [markEdits, setMarkEdits] = useState({}); // College Finals: { studentId: "INC" | "DRP" | "" }
   const current = options.find((a) => a.id === pick) || options[0];
   // Grading periods of this class + subject: quarters (K–12) or its semester's Prelim / Midterm / Finals (College).
   const TERMS = current ? termsFor(sections.levelOf(current.class), subjects.find((x) => x.name === current.subject)) : [];
   const term = TERMS.some((t) => t.key === termPick) ? termPick : TERMS[0]?.key;
   const key = current ? `${current.id}|${term}` : "";
-  useEffect(() => setEdits({}), [key]);
+  useEffect(() => { setEdits({}); setMarkEdits({}); }, [key]);
   // This class + subject's activities and grades (every quarter) load from the server when it's opened.
   const view = useView(current ? { view: "gradebook", class: current.class, subject: current.subject } : null);
   const ready = !view.loading && !view.error;
@@ -87,6 +88,11 @@ export default function Gradebook() {
     );
   }
 
+  const level = sections.levelOf(current.class);
+  const college = level === "college";
+  const COMPS = componentsFor(level); // College: Class Standing / Requirements / Major Exam
+  const termInfo = TERMS.find((t) => t.key === term);
+  const canMark = college && termInfo?.short === "Finals"; // INC / DRP is given with the Finals grade
   const list = students.filter((s) => s.class === current.class).sort((a, b) => a.roll.localeCompare(b.roll) || a.name.localeCompare(b.name));
   const acts = activities
     .filter((a) => a.class === current.class && a.subject === current.subject && a.term === term)
@@ -106,14 +112,19 @@ export default function Gradebook() {
   const rec = (sid) => grades.find((g) => g.id === gradeId(year, sid, current.subject, term));
 
   const invalidCount = acts.reduce((n, act) => n + list.filter((s) => !isValid(act, s.id)).length, 0);
-  const dirty = acts.some((act) => list.some((s) => typed(act, s.id) !== (act.scores?.[s.id] ?? "").toString()));
-  // The grade students get: transmuted when the school uses the DepEd table, else the weighted %.
-  const shown = (g) => (g === null ? null : school.transmutation ? transmute(g) : g);
+  const mark = (sid) => markEdits[sid] ?? rec(sid)?.remark ?? "";
+  const dirty = acts.some((act) => list.some((s) => typed(act, s.id) !== (act.scores?.[s.id] ?? "").toString()))
+    || list.some((s) => markEdits[s.id] !== undefined && markEdits[s.id] !== (rec(s.id)?.remark ?? ""));
+  // The grade students get: transmuted when the school uses the DepEd table (K–12 only), else the weighted %.
+  const transmuting = school.transmutation && !college;
+  const shown = (g) => (g === null ? null : transmuting ? transmute(g) : g);
+  const passes = (v) => (college ? !!collegeGrade(school, v)?.passed : v >= school.passingMark);
   const graded = list.filter((s) => computed[s.id].grade !== null);
+  const toPublish = list.filter((s) => computed[s.id].grade !== null || (canMark && mark(s.id)));
   const avg = graded.length ? graded.reduce((a, s) => a + shown(computed[s.id].grade), 0) / graded.length : null;
-  const passed = graded.filter((s) => shown(computed[s.id].grade) >= school.passingMark).length;
+  const passed = graded.filter((s) => passes(shown(computed[s.id].grade))).length;
   const isPublished = list.some((s) => rec(s.id)?.published);
-  const upToDate = list.every((s) => !rec(s.id)?.published || rec(s.id).score === reportGrade(savedComputed[s.id].grade, school));
+  const upToDate = list.every((s) => !rec(s.id)?.published || (rec(s.id).score ?? null) === reportGrade(savedComputed[s.id].grade, school, level));
   const status = !isPublished ? "Not published" : upToDate && !dirty ? "Published" : "Changes not published";
   const teacherName = teachers.find((t) => t.id === current.teacherId)?.name || "—";
 
@@ -134,19 +145,24 @@ export default function Gradebook() {
 
   const publish = () => {
     if (invalidCount) return toast(`Fix ${invalidCount} invalid score${invalidCount > 1 ? "s" : ""} first`);
-    if (!graded.length) return toast("Enter some scores before publishing");
+    if (!toPublish.length) return toast("Enter some scores before publishing");
     const apply = () => {
       upsertMany("activities", merged());
       setEdits({});
-      upsertMany("grades", graded.map((s) => ({
-        id: gradeId(year, s.id, current.subject, term), year, studentId: s.id, class: current.class, subject: current.subject, term,
-        score: reportGrade(computed[s.id].grade, school), published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
-      })));
-      const n = `${graded.length} grade${graded.length === 1 ? "" : "s"}`;
+      setMarkEdits({});
+      upsertMany("grades", toPublish.map((s) => {
+        const score = reportGrade(computed[s.id].grade, school, level);
+        return {
+          id: gradeId(year, s.id, current.subject, term), year, studentId: s.id, class: current.class, subject: current.subject, term,
+          ...(score === null ? {} : { score }), ...(canMark ? { remark: mark(s.id) } : {}),
+          published: true, updatedBy: user.teacherId || user.id, updatedAt: todayIso(),
+        };
+      }));
+      const n = `${toPublish.length} grade${toPublish.length === 1 ? "" : "s"}`;
       toast(`Published ${n} — students and parents can see them now`);
     };
-    const missing = list.length - graded.length;
-    if (missing) confirm("Publish with missing grades?", `${missing} student(s) have no scores yet, so they won't get a grade for this quarter.`, apply, "Publish");
+    const missing = list.length - toPublish.length;
+    if (missing) confirm("Publish with missing grades?", `${missing} student(s) have no scores yet, so they won't get a grade for this grading period.`, apply, "Publish");
     else apply();
   };
 
@@ -156,7 +172,7 @@ export default function Gradebook() {
   }, "Unpublish");
 
   const addActivity = () => openModal("Add Activity", (
-    <ActivityForm onCancel={closeModal} onSave={(v) => {
+    <ActivityForm components={COMPS} onCancel={closeModal} onSave={(v) => {
       add("activities", { ...v, class: current.class, subject: current.subject, term, year, scores: {}, createdBy: user.teacherId || user.id });
       closeModal();
       toast(`${v.title} added`);
@@ -166,7 +182,7 @@ export default function Gradebook() {
     const highest = Math.max(0, ...Object.values(act.scores || {}).map(Number));
     openModal("Edit Activity", (
       <>
-        <ActivityForm initial={act} minMax={highest} onCancel={closeModal} onSave={(v) => { update("activities", act.id, v); closeModal(); toast("Activity updated"); }} />
+        <ActivityForm components={COMPS} initial={act} minMax={highest} onCancel={closeModal} onSave={(v) => { update("activities", act.id, v); closeModal(); toast("Activity updated"); }} />
         <hr className="sep" />
         <button className="btn light danger-text" onClick={() => confirm("Delete activity?", `"${act.title}" and all its scores will be removed. Grades will be recalculated.`, () => {
           remove("activities", act.id);
@@ -176,7 +192,7 @@ export default function Gradebook() {
     ));
   };
 
-  const groups = COMPONENTS.map((c) => ({ ...c, acts: acts.filter((a) => a.component === c.key), weight: Number(weights[c.key]) || 0 }));
+  const groups = COMPS.map((c) => ({ ...c, acts: acts.filter((a) => a.component === c.key), weight: Number(weights[c.key]) || 0 }));
 
   // Most recent earlier quarter that has activities for this class + subject (to copy its setup).
   const prev = TERMS.slice(0, TERMS.findIndex((t) => t.key === term)).reverse()
@@ -219,12 +235,13 @@ export default function Gradebook() {
           </div>
         </div>
         <div className="formula">
-          <b>Quarterly grade</b> =
+          <b>{college ? `${termInfo?.short} grade` : "Quarterly grade"}</b> =
           {groups.map((g, i) => <span key={g.key}>{i > 0 && " + "}<span className={`chip-${g.key}`}>{g.label} × {g.weight}%</span></span>)}
-          {school.transmutation && <span>→ <span className="chip-QA">DepEd transmutation table</span></span>}
+          {transmuting && <span>→ <span className="chip-QA">DepEd transmutation table</span></span>}
+          {college && <span>→ <span className="chip-QA">College grade 1.00–5.00</span></span>}
         </div>
         <p className="hint">
-          Teacher: <b>{teacherName}</b> · Passing mark {school.passingMark}% · Component % = points earned ÷ points possible.
+          Teacher: <b>{teacherName}</b> · {college ? "Passing grade 3.00" : `Passing mark ${school.passingMark}%`} · Component % = points earned ÷ points possible.
           A blank score means "not entered yet" and is skipped; type 0 for missing work. {scope.all ? "" : "You only see classes you're assigned to."}
         </p>
       </div>
@@ -234,7 +251,7 @@ export default function Gradebook() {
       ) : (<>
       <div className="stat-grid">
         <StatTile label="Activities" value={acts.length} icon="list" tone="purple" />
-        <StatTile label="Class average" value={avg === null ? "—" : `${fmt(Math.round(avg * 10) / 10)} · ${gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
+        <StatTile label="Class average" value={avg === null ? "—" : `${fmt(Math.round(avg * 10) / 10)} · ${college ? collegeGrade(school, avg)?.grade : gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
         <StatTile label="Passed" value={graded.length ? `${passed} / ${graded.length}` : "—"} icon="check" tone="green" />
         <StatTile label="Report cards" value={status} icon="notice" tone="orange" />
       </div>
@@ -278,7 +295,8 @@ export default function Gradebook() {
                 {groups.map((g) => (
                   <th key={g.key} className={`no-sort grp grp-${g.key}`} colSpan={g.acts.length + 1}>{g.label} · {g.weight}%</th>
                 ))}
-                <th className="no-sort" rowSpan={2}>Grade{school.transmutation && <small className="th-sub">transmuted</small>}</th>
+                <th className="no-sort" rowSpan={2}>Grade{transmuting && <small className="th-sub">transmuted</small>}{college && <small className="th-sub">% · 1.00–5.00</small>}</th>
+                {canMark && <th className="no-sort" rowSpan={2}>INC / DRP</th>}
                 <th className="no-sort" rowSpan={2}>Report<small className="th-sub">card</small></th>
               </tr>
               <tr>
@@ -297,9 +315,9 @@ export default function Gradebook() {
               {list.length ? list.map((s) => {
                 const c = computed[s.id];
                 const value = shown(c.grade);
-                const g = value === null ? null : gradeFor(school, value);
+                const g = value === null ? null : college ? collegeGrade(school, value) : gradeFor(school, value);
                 const r = rec(s.id);
-                const final = reportGrade(c.grade, school);
+                const final = reportGrade(c.grade, school, level);
                 return (
                   <tr key={s.id}>
                     <td className="stu"><div className="who"><Avatar name={s.name} color={s.color} /><div>{s.name}<small>Roll {s.roll}</small></div></div></td>
@@ -316,10 +334,16 @@ export default function Gradebook() {
                       }),
                       <td key={grp.key + "-pct"} className="pct">{fmt(c.components[grp.key])}</td>,
                     ])}
-                    <td className="final">{c.grade === null ? "—" : <><b>{fmt(value)}</b> <Badge value={g.grade} cls={value >= school.passingMark ? "b-green" : "b-red"} />{school.transmutation && <small className="initial">initial {fmt(c.grade)}</small>}</>}</td>
+                    <td className="final">{c.grade === null ? "—" : <><b>{fmt(value)}</b> <Badge value={g?.grade ?? "—"} cls={passes(value) ? "b-green" : "b-red"} />{transmuting && <small className="initial">initial {fmt(c.grade)}</small>}</>}</td>
+                    {canMark && (
+                      <td>
+                        <Select value={mark(s.id)} disabled={!canEdit} aria-label={`INC or DRP for ${s.name}`} onChange={(v) => setMarkEdits((m) => ({ ...m, [s.id]: v }))}
+                          options={[{ value: "", label: "—" }, { value: "INC", label: "INC · Incomplete" }, { value: "DRP", label: "DRP · Dropped" }]} />
+                      </td>
+                    )}
                     <td>
                       {r?.published
-                        ? (r.score === final ? <Badge value={`${r.score} ✓`} cls="b-green" /> : <Badge value={`${r.score} → ${final ?? "—"}`} cls="b-amber" />)
+                        ? (r.remark ? <Badge value={`${r.remark} ✓`} cls="b-amber" /> : (r.score ?? null) === final ? <Badge value={`${r.score} ✓`} cls="b-green" /> : <Badge value={`${r.score ?? "—"} → ${final ?? "—"}`} cls="b-amber" />)
                         : <Badge value={r ? "Draft" : "Not published"} cls="b-blue" />}
                     </td>
                   </tr>

@@ -51,7 +51,7 @@ export function StudentOverview({ me, parentView = false }) {
   const data = useData();
   const { attendance, teachers, classes, school, assignments, routine } = data;
   const notices = useVisibleNotices(me); // whole-school + this student's class
-  const { average } = buildReport(me, data); // general average of published grades
+  const { average, college, gwa } = buildReport(me, data); // general average (College: GWA) of published grades
   const grade = average === null ? null : gradeFor(school, average);
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
   const today = routine[me.class]?.[dayIdx] || [];
@@ -70,7 +70,9 @@ export function StudentOverview({ me, parentView = false }) {
         </p>
         <div className="stat-grid">
           <StatTile label="Attendance (this year)" value={pct(attendanceRate(log))} icon="list" tone="purple" />
-          <StatTile label={grade ? `General Average · ${grade.remark}` : "General Average"} value={grade ? `${average} · ${grade.grade}` : "—"} icon="exam" tone="blue" />
+          {college
+            ? <StatTile label={gwa === null ? "GWA" : `GWA · ${gwa <= 3 ? "Passing" : "Failing"}`} value={gwa === null ? "—" : gwa.toFixed(2)} icon="exam" tone="blue" />
+            : <StatTile label={grade ? `General Average · ${grade.remark}` : "General Average"} value={grade ? `${average} · ${grade.grade}` : "—"} icon="exam" tone="blue" />}
           <StatTile label="Subjects" value={subjects.length} icon="subject" tone="orange" />
           <StatTile label="Classes today" value={today.length} icon="calendar" tone="green" />
         </div>

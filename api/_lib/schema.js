@@ -97,7 +97,8 @@ const RULES = {
     class: req(text("Section", 40, { ref: "section" })),
     subject: SUBJECT(),
     term: req(text("Grading period", 4, { oneOf: ALL_TERMS.map((t) => t.key) })),
-    score: req(num("Grade", 0, 100)),
+    score: num("Grade", 0, 100), // required unless the grade is an INC / DRP mark (College)
+    remark: text("Mark", 3, { oneOf: ["", "INC", "DRP"] }),
     published: req({ label: "Published", type: "boolean" }),
     updatedBy: text("Updated by", 40), updatedAt: date("Updated on"), year: req(text("School year", 9)),
   },
@@ -203,6 +204,10 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
     const sec = ctx.sections.get(merged.class);
     const subject = ctx.subjectByName.get(merged.subject);
     if (!offers(subject, sec)) bad(`${sectionLabel(sec)} doesn't take ${merged.subject}. Add ${gradeLabel(sec.grade)}${sec.strand ? ` (${sec.strand})` : ""}${sec.program ? ` (${sec.program})` : ""} to the subject on the Subjects page first.`);
+    if (col === "grades") {
+      if (merged.remark && sec.level !== "college") bad("INC and DRP marks are only for College grades.");
+      if (!merged.remark && (merged.score === undefined || merged.score === null)) bad("Grade is required.");
+    }
     // Quarters for K–12; the subject's semester's Prelim / Midterm / Finals for College.
     if (merged.term && !termsFor(sec.level, subject).some((t) => t.key === merged.term)) bad(`${merged.subject} in ${sectionLabel(sec)} has no "${termLabel(merged.term)}" grading period.`);
   }

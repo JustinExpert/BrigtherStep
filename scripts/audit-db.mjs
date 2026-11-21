@@ -119,7 +119,7 @@ try {
     if (!studentById.has(g.studentId)) problem("grades", "student doesn't exist", g._id);
     if (!SUBJECTS.includes(g.subject)) problem("grades", "unknown subject", g._id);
     if (!terms.has(g.term)) problem("grades", "unknown quarter", g._id);
-    if (!(typeof g.score === "number" && g.score >= 0 && g.score <= 100)) problem("grades", "score not 0–100", `${g._id}: ${g.score}`);
+    if (g.remark ? !["INC", "DRP"].includes(g.remark) : !(typeof g.score === "number" && g.score >= 0 && g.score <= 100)) problem("grades", "score not 0–100 (and no INC/DRP mark)", `${g._id}: ${g.score}`);
     if (typeof g.published !== "boolean") problem("grades", "published isn't true/false", g._id);
     if (!validClass(g.class)) problem("grades", "unknown class", g._id);
     if (g.year === ay?.key && !assignments.some((a) => a.class === g.class && a.subject === g.subject)) problem("grades", "current-year grade for a class+subject nobody teaches", g._id);

@@ -3,7 +3,7 @@ import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { buildReport, termLabel, useScope } from "../lib/scope.js";
 import { downloadCsv, fmtDate, slug, todayIso } from "../lib/utils.js";
-import { TERMS } from "../constants.js";
+import { COLLEGE_TERMS, TERMS } from "../constants.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
 import { gradeFor } from "./SchoolSetup.jsx";
@@ -29,7 +29,7 @@ export default function Reports() {
   const cls = mine.includes(picked) ? picked : mine[0] || "";
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayIso());
-  const [term, setTerm] = useState("Q2");
+  const [termPick, setTerm] = useState("Q2");
   // This class's grades and attendance for the school year load from the server when it's chosen.
   const view = useView(cls ? { view: "class", class: cls } : null);
   // Class grades can also be shown for a closed school year (read-only, loaded when chosen).
@@ -58,6 +58,9 @@ export default function Reports() {
   }
 
   const klass = sections.byId.get(cls);
+  // Grading periods: quarters (K–12), or both semesters' Prelim / Midterm / Finals (College).
+  const PERIODS = klass?.level === "college" ? COLLEGE_TERMS : TERMS;
+  const term = PERIODS.some((t) => t.key === termPick) ? termPick : PERIODS[0].key;
   const classLabel = `${sections.label(cls)}${klass?.strand ? " · " + klass.strand : ""}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
   const badRange = from > to;
@@ -133,7 +136,7 @@ export default function Reports() {
           )}
           {tab === "grades" && (
             <label>Grading period
-              <Select value={term} onChange={setTerm} aria-label="Grading period" options={TERMS.map((t) => ({ value: t.key, label: t.label }))} />
+              <Select value={term} onChange={setTerm} aria-label="Grading period" options={PERIODS.map((t) => ({ value: t.key, label: t.label }))} />
             </label>
           )}
         </div>
