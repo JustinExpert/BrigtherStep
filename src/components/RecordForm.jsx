@@ -33,6 +33,7 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
           f.type === "checks" ? (
             <fieldset key={f.key} className="check-group" style={{ gridColumn: "1 / -1" }}>
               <legend>{f.label}{f.required && " *"}</legend>
+              <div className="check-list">
               {f.options.map((o) => {
                 const val = optValue(o);
                 return (
@@ -43,6 +44,7 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
                   </label>
                 );
               })}
+              </div>
               {f.hint && <small className="hint">{f.hint}</small>}
             </fieldset>
           ) :
