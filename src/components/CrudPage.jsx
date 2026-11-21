@@ -15,6 +15,7 @@ import { PageHead } from "./ui.jsx";
 export default function CrudPage({
   collection, title, listTitle, singular, crumbs, fields, cols, filter, onView,
   module, defaults = {}, searchPlaceholder, describe = (r) => r.name || r.title || r.id, rowFilter, subtitle, csv,
+  prepare = (vals) => vals, // last change to the form's values before saving: prepare(vals, row | null)
 }) {
   const data = useData();
   const can = usePermission();
@@ -28,7 +29,8 @@ export default function CrudPage({
     openModal(row ? `Edit ${singular}` : `Add ${singular}`, (
       <RecordForm fields={fields} initial={row || defaults} submitLabel={row ? "Save changes" : `Add ${singular}`}
         onCancel={closeModal}
-        onSubmit={(vals) => {
+        onSubmit={(raw) => {
+          const vals = prepare(raw, row);
           row ? data.update(collection, row.id, vals) : data.add(collection, { ...defaults, ...vals });
           closeModal();
           toast(row ? `${singular} updated` : `${singular} added`);

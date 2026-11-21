@@ -1,8 +1,8 @@
 // Read-only health check of the BrighterStep database: cross-checks every collection against
 // the others (links, ids, school years, value ranges). Changes nothing.
 // Run: npm run db:audit
-import { GRADUATED, SUBJECTS, TERMS } from "../src/constants.js";
-import { gradeOf, levelOf, parseEnabledLevels } from "../src/levels.js";
+import { GRADUATED, TERMS } from "../src/constants.js";
+import { GRADES, gradeOf, levelOf, offers, parseEnabledLevels } from "../src/levels.js";
 import { LEVELS, MODULES, ROLES } from "../src/lib/permissions.js";
 import { connect, dbName, redact, uri } from "./db.mjs";
 
@@ -29,6 +29,16 @@ try {
   const [students, teachers, classes, subjects, assignments, grades, activities, attendance, notices, users, settings] = await Promise.all(
     ["students", "teachers", "classes", "subjects", "assignments", "grades", "activities", "attendance", "notices", "users", "settings"].map(all));
   Object.assign(counts, { students: students.length, teachers: teachers.length, classes: classes.length, subjects: subjects.length, assignments: assignments.length, grades: grades.length, activities: activities.length, attendance: attendance.length, notices: notices.length, users: users.length });
+
+  // ---------- Subjects (grades, activities, assignments and teachers refer to them by name) ----------
+  const SUBJECTS = subjects.map((s) => s.name);
+  const subjectByName = new Map(subjects.map((s) => [s.name, s]));
+  if (new Set(SUBJECTS.map((n) => n.toLowerCase())).size !== SUBJECTS.length) problem("subjects", "two subjects with the same name");
+  for (const s of subjects) {
+    if (!Array.isArray(s.grades) || !s.grades.length) problem("subjects", "no grade levels (run npm run db:migrate-subjects)", s._id);
+    else if (s.grades.some((g) => !GRADES.some((x) => x.key === g))) problem("subjects", "unknown grade level", s._id);
+    if ("classes" in s) problem("subjects", "old free-text \"classes\" field", s._id);
+  }
 
   // ---------- Settings & school years ----------
   const school = settings.find((s) => s._id === "school")?.value;
@@ -90,6 +100,7 @@ try {
   for (const a of assignments) {
     if (!currentClass(a.class)) problem("assignments", "not for one of this year's sections", a._id);
     if (!SUBJECTS.includes(a.subject)) problem("assignments", "unknown subject", a._id);
+    else if (classes.some((c) => c._id === a.class) && !offers(subjectByName.get(a.subject), classes.find((c) => c._id === a.class))) problem("assignments", "section's grade level doesn't take this subject", a._id);
     if (!teacherIds.has(a.teacherId)) problem("assignments", "teacher doesn't exist", `${a._id} → ${a.teacherId}`);
     const k = `${a.class}|${a.subject}`;
     if (pairSeen.has(k)) problem("assignments", "two teachers for the same class+subject", k);

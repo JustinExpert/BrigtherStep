@@ -660,3 +660,9 @@ a.year-chip:hover { background: #e9dcfb; }
 .enrol-history b { font-weight: 600; }
 .enrol-history span { color: var(--muted); font-size: 13px; text-align: right; }
 .enrol-history small { grid-column: 1 / -1; color: #55535b; font-size: 12px; }
+
+/* Checkbox group in forms (e.g. a subject's grade levels) */
+.check-group { border: 1px solid var(--line, #e6e3ee); border-radius: 10px; padding: 10px 12px; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.check-group legend { padding: 0 4px; font-weight: 600; }
+.check-group .check { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; flex-direction: row; }
+.check-group .hint { flex-basis: 100%; }

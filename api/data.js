@@ -8,6 +8,7 @@ import { loadView } from "./_lib/views.js";
 import { checkRecord, checkRefs, checkSchool, newRefs } from "./_lib/schema.js";
 import { enroll, rollSections, transferStudent } from "./_lib/sections.js";
 import { todayIso } from "../src/lib/utils.js";
+import { offers, sectionLabel } from "../src/levels.js";
 import { DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
@@ -70,6 +71,7 @@ async function mutate(user, body) {
       checkYear(ctx, body.col, { ...item, _id: id });
       await checkRefs(db, checkRecord(body.col, item, item, ctx), ctx);
       if (body.col === "classes") await checkSection(db, ctx, id, item);
+      if (body.col === "subjects") await checkSubject(db, ctx, id, item, null);
       try { await coll.insertOne({ _id: id, ...item }); } catch (e) { if (e?.code === 11000) bad("A record with this id already exists."); throw e; }
       if (body.col === "students" && ctx.currentSections.has(item.class)) {
         const ay = ctx.settings.school.academicYear, today = todayIso();
@@ -97,6 +99,7 @@ async function mutate(user, body) {
         if (["year", "level", "grade"].some((k) => k in patch && patch[k] !== existing[k])) bad("A section's school year, level and grade can't be changed. Create a new section instead.");
         await checkSection(db, ctx, id, { ...existing, ...patch });
       }
+      if (body.col === "subjects") await checkSubject(db, ctx, id, { ...existing, ...patch }, existing);
       if (body.col === "grades" && ["studentId", "subject", "term", "year"].some((k) => k in patch && patch[k] !== existing[k])) bad("A grade's student, subject, quarter and year can't be changed.");
       if (Object.keys(patch).length) await coll.updateOne({ _id: id }, { $set: patch });
       return {};
@@ -116,6 +119,10 @@ async function mutate(user, body) {
             .map(([c, q]) => db.collection(c).countDocuments(q, { limit: 1 })));
           if (used.some(Boolean)) bad(`${rec.name} still has students or records, so it can't be deleted.`);
         }
+        if (body.col === "subjects") {
+          const where = await subjectUse(db, rec.name);
+          if (where) bad(`${rec.name} is still used by ${where}, so it can't be deleted.`);
+        }
       }
       await coll.deleteMany({ _id: { $in: existing.map((r) => r._id) } });
       return {};
@@ -123,6 +130,7 @@ async function mutate(user, body) {
 
     case "upsertMany": {
       const coll = colOf(body.col);
+      if (body.col === "subjects") bad("Add or edit subjects one at a time.");
       if (!Array.isArray(body.items) || body.items.length > MAX_BATCH) bad("Invalid list of records.");
       const items = body.items.map((it) => clean(it));
       const ids = items.map((it) => checkId(body.col, it?.id));
@@ -168,7 +176,7 @@ async function mutate(user, body) {
       const y = isObj(patch.academicYear) ? patch.academicYear : {};
       const academicYear = { ...school.academicYear, ...pick(y, ["label", "start", "end"]), key: school.academicYear.key };
       const next = { ...school, ...patch, academicYear, pastYears: school.pastYears || [] };
-      checkSchool(patch, next);
+      checkSchool(patch, next, ctx);
       await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true });
       return {};
     }
@@ -221,6 +229,7 @@ async function mutate(user, body) {
       const { cls, day, period, subject } = body;
       if (!ctx.currentSections.has(cls) || !Number.isInteger(day) || day < 0 || day >= DATA.DAYS.length || !Number.isInteger(period) || period < 0 || period >= DATA.PERIODS.length) bad("Invalid timetable slot.");
       if (typeof subject !== "string" || subject.length > 60 || subject.includes("$")) bad("Invalid subject.");
+      if (subject && !offers(ctx.subjectByName.get(subject), ctx.sections.get(cls))) bad(`${sectionLabel(ctx.sections.get(cls))} doesn't take ${subject}.`);
       const { routine } = await loadSettings(db);
       routine[cls] ||= DATA.DAYS.map(() => DATA.PERIODS.map(() => ({ subject: "" }))); // a new section starts with a free week
       routine[cls][day][period] = { subject };
@@ -290,6 +299,31 @@ async function checkSection(db, ctx, id, sec) {
   if (sec.year !== ctx.settings.school.academicYear.key) bad("Sections are created for the current school year.");
   const twin = await db.collection("classes").findOne({ _id: { $ne: id }, year: sec.year, grade: sec.grade, name: sec.name });
   if (twin) bad(`There's already a section called "${sec.name}" in that grade this year.`);
+}
+
+/** Where a subject (by name) is still used, e.g. "3 grades", or null. Grades, activities, assignments and teachers refer to it by name. */
+async function subjectUse(db, name) {
+  const counts = await Promise.all(["teachers", "assignments", "grades", "activities"].map((c) => db.collection(c).countDocuments({ subject: name }, { limit: 1 })));
+  const used = ["a teacher", "a teaching assignment", "grades", "gradebook activities"].filter((_, i) => counts[i]);
+  return used.length ? used.join(", ") : null;
+}
+
+/**
+ * A new or edited subject: its name is unique, a used subject keeps its name (records refer to it by name),
+ * and it isn't taken away from a section that still has a teacher assigned for it.
+ */
+async function checkSubject(db, ctx, id, sub, existing) {
+  const twin = ctx.subjects.find((x) => x._id !== id && x.name.trim().toLowerCase() === sub.name.trim().toLowerCase());
+  if (twin) bad(`There's already a subject called "${twin.name}".`);
+  if (existing && existing.name !== sub.name) {
+    const where = await subjectUse(db, existing.name);
+    if (where) bad(`${existing.name} is already used by ${where}, so its name can't be changed. Add a new subject instead.`);
+  }
+  if (existing) {
+    const left = (await db.collection("assignments").find({ subject: existing.name }).toArray())
+      .map((a) => ctx.sections.get(a.class)).filter((sec) => sec && !offers(sub, sec));
+    if (left.length) bad(`${left.map((sec) => sectionLabel(sec)).join(", ")} still ${left.length > 1 ? "have" : "has"} a teacher assigned for ${existing.name}. Unassign it on Teaching Assignments first.`);
+  }
 }
 
 /** Replaces all school data (used by restore and reset). Sessions are kept; removed accounts lose access on their next request. */

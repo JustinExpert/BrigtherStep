@@ -51,3 +51,13 @@ export const sectionLabel = (section, fallbackId) => (section ? `${gradeLabel(se
 
 /** Sort sections by school order of their grade, then by name. */
 export const bySchoolOrder = (a, b) => GRADES.findIndex((g) => g.key === a.grade) - GRADES.findIndex((g) => g.key === b.grade) || String(a.name).localeCompare(String(b.name));
+
+/**
+ * Whether a section takes a subject: the subject lists the section's grade level, and (Senior High)
+ * it is either a core subject (no strands listed) or listed for the section's strand.
+ */
+export const offers = (subject, section) => !!subject && !!section && (subject.grades || []).includes(section.grade)
+  && (!subject.strands?.length || subject.strands.includes(section.strand));
+
+/** The levels a subject is taught in, e.g. ["elementary", "junior_high"]. */
+export const subjectLevels = (subject) => [...new Set((subject.grades || []).map((g) => gradeOf(g)?.level).filter(Boolean))];

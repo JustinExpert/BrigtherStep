@@ -93,10 +93,11 @@ export function teacherScope(user, assignments, advised) {
 export async function context(user) {
   const db = await getDb();
   const isTeacher = user.role === "teacher";
-  const [settings, assignments, sectionDocs] = await Promise.all([
+  const [settings, assignments, sectionDocs, subjects] = await Promise.all([
     loadSettings(db),
     isTeacher ? db.collection("assignments").find({ teacherId: user.teacherId || "-" }).toArray() : [],
     db.collection("classes").find({}).toArray(),
+    db.collection("subjects").find({}).toArray(), // the school's subject list (small)
   ]);
   const levels = enabledLevels();
   const year = currentYear(settings);
@@ -106,7 +107,8 @@ export async function context(user) {
   const can = (module, need = "view") => allows(settings.permissions, module, user.role, need);
   const advised = isTeacher ? [...sections.values()].filter((s) => s.year === year && s.adviser === user.teacherId).map((s) => s._id) : [];
   const scope = teacherScope(user, assignments, advised);
-  return { db, settings, levels, sections, currentSections, can, scope, isAdmin: ADMINS.includes(user.role) };
+  const subjectByName = new Map(subjects.map((x) => [x.name, x]));
+  return { db, settings, levels, sections, currentSections, subjects, subjectByName, can, scope, isAdmin: ADMINS.includes(user.role) };
 }
 
 const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replace(/^Class /, "") : null);

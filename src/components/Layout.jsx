@@ -12,7 +12,7 @@ import { relTime } from "../lib/utils.js";
 import { LevelProvider, LevelTabs } from "../lib/level.jsx";
 
 // Pages that show one school level at a time (the level tabs appear on these).
-const LEVEL_PAGES = ["/students", "/class", "/assignments", "/routine", "/attendance", "/grades", "/reports"];
+const LEVEL_PAGES = ["/students", "/class", "/subject", "/assignments", "/routine", "/attendance", "/grades", "/reports"];
 
 /*
  * Each link is shown when the user's role is in `roles`, or when the permission matrix
@@ -45,7 +45,7 @@ export const NAV = [
     { to: "/report-card", label: "Report Card", roles: ["student", "parent"] },
   ]},
   { to: "/class", label: "Sections", icon: "class", module: "classes" },
-  { to: "/subject", label: "Subject", icon: "subject", module: "subjects" },
+  { to: "/subject", label: "Subjects", icon: "subject", module: "subjects" },
   { to: "/routine", label: "Routine", icon: "calendar", module: "routine" },
   { to: "/attendance", label: "Attendance", icon: "list", module: "attendance" },
   { to: "/notice", label: "Announcements", icon: "notice", module: "notices" },

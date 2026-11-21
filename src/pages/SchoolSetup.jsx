@@ -5,7 +5,8 @@ import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
 import Icon from "../components/Icon.jsx";
 import { PageHead } from "../components/ui.jsx";
-import { GRADUATED, SUBJECTS } from "../constants.js";
+import { GRADUATED } from "../constants.js";
+import { subjectLevels } from "../levels.js";
 import { COMPONENTS, DEPED_SCALE, weightsFor, weightTotal } from "../lib/gradeCalc.js";
 import DateInput from "../components/DateInput.jsx";
 
@@ -80,7 +81,7 @@ function validate(s) {
   if (g.some((r) => !(r.min >= 0 && r.min <= 100))) errs.push("Grade minimums must be between 0 and 100.");
   if (new Set(g.map((r) => Number(r.min))).size !== g.length) errs.push("Two grades can't start at the same percentage.");
   if (!g.some((r) => Number(r.min) === 0)) errs.push("One grade must start at 0% so every score gets a grade.");
-  for (const subject of SUBJECTS) {
+  for (const subject of Object.keys(s.weights)) {
     const wt = s.weights[subject];
     if (COMPONENTS.some((c) => !(wt[c.key] >= 0 && wt[c.key] <= 100))) errs.push(`${subject}: each weight must be between 0 and 100.`);
     else if (weightTotal(wt) !== 100) errs.push(`${subject}: weights add up to ${weightTotal(wt)}%, they must total 100%.`);
@@ -89,8 +90,10 @@ function validate(s) {
 }
 
 export default function SchoolSetup() {
-  const { school, saveSchool } = useData();
+  const { school, saveSchool, subjects, levels = [] } = useData();
   const { toast, openModal, closeModal } = useUI();
+  // Weights for the subjects of the levels this school offers (Subjects page), A–Z.
+  const SUBJECTS = subjects.filter((x) => subjectLevels(x).some((l) => levels.includes(l))).map((x) => x.name).sort((a, b) => a.localeCompare(b));
   const can = usePermission();
   const canEdit = can("school", "edit");
   const [s, setS] = useState(() => ({
@@ -99,6 +102,7 @@ export default function SchoolSetup() {
     transmutation: !!school.transmutation,
     weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, { ...weightsFor(school, sub) }])),
   }));
+  const wOf = (sub) => s.weights[sub] || weightsFor(school, sub); // a subject added since this page opened
   const [newStrand, setNewStrand] = useState("");
   const addStrand = () => {
     const v = newStrand.trim().toUpperCase();
@@ -111,7 +115,7 @@ export default function SchoolSetup() {
     setS({ ...s, grading: DEPED_SCALE.map((g) => ({ ...g })), passingMark: 75, transmutation: true });
     toast("DepEd grading applied — click Save changes to keep it");
   };
-  const setWeight = (subject, k, v) => setS({ ...s, weights: { ...s.weights, [subject]: { ...s.weights[subject], [k]: v } } });
+  const setWeight = (subject, k, v) => setS({ ...s, weights: { ...s.weights, [subject]: { ...wOf(subject), [k]: v } } });
   const [errors, setErrors] = useState([]);
   const set = (k) => (e) => setS({ ...s, [k]: e.target.value });
   const setYear = (k) => (e) => setS({ ...s, academicYear: { ...s.academicYear, [k]: e.target.value } });
@@ -125,7 +129,7 @@ export default function SchoolSetup() {
       academicYear: { ...s.academicYear, label: s.academicYear.label.trim() },
       passingMark: Number(s.passingMark),
       grading: s.grading.map((g) => ({ grade: g.grade.trim(), min: Number(g.min), remark: g.remark.trim() })).sort((a, b) => b.min - a.min),
-      weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, Object.fromEntries(COMPONENTS.map((c) => [c.key, Number(s.weights[sub][c.key])]))])),
+      weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, Object.fromEntries(COMPONENTS.map((c) => [c.key, Number(wOf(sub)[c.key])]))])),
       strands: s.strands.map((x) => x.trim()),
       transmutation: !!s.transmutation,
     };
@@ -253,13 +257,13 @@ export default function SchoolSetup() {
               </thead>
               <tbody>
                 {SUBJECTS.map((subject) => {
-                  const total = weightTotal(s.weights[subject]);
+                  const total = weightTotal(wOf(subject));
                   return (
                     <tr key={subject}>
                       <td><b>{subject}</b></td>
                       {COMPONENTS.map((c) => (
                         <td key={c.key}>
-                          <input className="input" type="number" min="0" max="100" style={{ width: 90 }} value={s.weights[subject][c.key]}
+                          <input className="input" type="number" min="0" max="100" style={{ width: 90 }} value={wOf(subject)[c.key]}
                             aria-label={`${subject} ${c.label} weight`} onChange={(e) => setWeight(subject, c.key, e.target.value)} />
                         </td>
                       ))}

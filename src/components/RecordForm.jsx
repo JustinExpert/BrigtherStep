@@ -3,16 +3,20 @@ import Select from "./Select.jsx";
 import DateInput from "./DateInput.jsx";
 
 /**
- * fields: [{ key, label, type?: text|email|tel|number|date|select|textarea, options?, required?, full? }]
+ * fields: [{ key, label, type?: text|email|tel|number|date|select|checks|textarea, options?, required?, full?, hint? }]
+ * "checks" is a group of checkboxes whose value is the list of ticked option values.
  * Select options are plain strings, or { value, label } when the stored value differs from the text shown.
  */
 const optValue = (o) => (typeof o === "object" ? o.value : o);
 export default function RecordForm({ fields, initial = {}, submitLabel = "Save", onSubmit, onCancel }) {
-  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, initial[f.key] ?? (f.type === "select" ? optValue(f.options[0]) : "")])));
+  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, f.type === "checks" ? (initial[f.key] || []).filter((x) => f.options.some((o) => optValue(o) === x)) : initial[f.key] ?? (f.type === "select" ? optValue(f.options[0]) : "")])));
+  const [error, setError] = useState("");
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
 
   const submit = (e) => {
     e.preventDefault();
+    const empty = fields.find((f) => f.type === "checks" && f.required && !v[f.key].length);
+    if (empty) return setError(`Tick at least one: ${empty.label}.`);
     const out = {};
     for (const f of fields) {
       const raw = v[f.key];
@@ -23,8 +27,25 @@ export default function RecordForm({ fields, initial = {}, submitLabel = "Save",
 
   return (
     <form className="form" onSubmit={submit}>
+      {error && <div className="alert error" role="alert">{error}</div>}
       <div className="form-grid">
         {fields.map((f) => (
+          f.type === "checks" ? (
+            <fieldset key={f.key} className="check-group" style={{ gridColumn: "1 / -1" }}>
+              <legend>{f.label}{f.required && " *"}</legend>
+              {f.options.map((o) => {
+                const val = optValue(o);
+                return (
+                  <label key={val} className="check">
+                    <input type="checkbox" checked={v[f.key].includes(val)}
+                      onChange={(e) => setV((s) => ({ ...s, [f.key]: e.target.checked ? [...s[f.key], val] : s[f.key].filter((x) => x !== val) }))} />
+                    {typeof o === "object" ? o.label : o}
+                  </label>
+                );
+              })}
+              {f.hint && <small className="hint">{f.hint}</small>}
+            </fieldset>
+          ) :
           <label key={f.key} style={f.full || f.type === "textarea" ? { gridColumn: "1 / -1" } : undefined}>
             {f.label}{f.required && " *"}
             {f.type === "select" ? (

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { DATA, SUBJECTS } from "../constants.js";
-import { useSections } from "../lib/sections.js";
+import { DATA } from "../constants.js";
+import { useSections, useSubjects } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
 import { useScope } from "../lib/scope.js";
 import { PageHead } from "../components/ui.jsx";
@@ -24,6 +24,7 @@ export default function Routine() {
   const ownId = user.role === "student" ? user.studentId : user.role === "parent" ? user.childIds?.[0] : null;
   const myClass = ownId ? students.find((s) => s.id === ownId)?.class : null;
   const sections = useSections();
+  const subjects = useSubjects();
   const scope = useScope();
   const { level, inLevel } = useLevel();
   // Staff pick from this level's sections; students and parents only see their own section.
@@ -64,7 +65,7 @@ export default function Routine() {
     if (editing) {
       return (
         <Select className="slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${DATA.PERIODS[pi]} subject`} onChange={(v) => change(di, pi, v)}
-          options={[{ value: "", label: "Free period" }, ...SUBJECTS]} />
+          options={[{ value: "", label: "Free period" }, ...subjects.forSection(view), ...(subject && !subjects.forSection(view).includes(subject) ? [subject] : [])]} />
       );
     }
     if (!subject) return <div className="slot free"><small>Free</small></div>;

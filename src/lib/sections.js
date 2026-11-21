@@ -2,7 +2,7 @@
 import { useMemo } from "react";
 import { useData } from "./DataContext.jsx";
 import { GRADUATED } from "../constants.js";
-import { bySchoolOrder, sectionLabel } from "../levels.js";
+import { bySchoolOrder, offers, sectionLabel, subjectLevels } from "../levels.js";
 
 /**
  * { byId, current, label(id), ofLevel(level), levelOf(id) } — `current` is this school year's
@@ -21,4 +21,21 @@ export function useSections() {
       levelOf: (id) => byId.get(id)?.level,
     };
   }, [classes, school.academicYear.key]);
+}
+
+/**
+ * The school's subjects: { all, names, forSection(id) → names that section takes, ofLevel(level) → subject records }.
+ * A section takes a subject when the subject lists its grade level (and, in Senior High, its strand or no strand).
+ */
+export function useSubjects() {
+  const { subjects } = useData();
+  const sections = useSections();
+  return useMemo(() => {
+    const all = [...subjects].sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      all, names: all.map((s) => s.name),
+      forSection: (id) => all.filter((s) => offers(s, sections.byId.get(id))).map((s) => s.name),
+      ofLevel: (level) => all.filter((s) => !level || subjectLevels(s).includes(level)),
+    };
+  }, [subjects, sections]);
 }

@@ -1,10 +1,12 @@
 // Sample data for the BrighterStep demo. All people and places are fictional.
 import { SEED_HASHES } from "./seedHashes.js";
 import { computeGrade, DEFAULT_WEIGHTS, reportGrade } from "./lib/gradeCalc.js";
-import { AVATAR_COLORS, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, SUBJECTS, TERMS } from "./constants.js";
+import { AVATAR_COLORS, DAYS, DEFAULT_SCHOOL, PERIODS, gradeId, STRANDS, TERMS } from "./constants.js";
 import { makePastYear } from "./samplePastYear.js";
 
-export { AVATAR_COLORS, STRANDS, SUBJECTS, TERMS };
+export { AVATAR_COLORS, STRANDS, TERMS };
+// The sample Elementary sections' subjects (the full subject list, for every level, is SUBJECT_CATALOG below).
+export const SUBJECTS = ["Mathematics", "English", "Science", "History", "Geography", "Art", "Music", "Physical Ed.", "Computer"];
 // Sample sections: Elementary Grade 1 … Grade 6 (ids kept from the original demo).
 const CLASSES = ["01", "02", "03", "04", "05", "06"];
 const school = structuredClone(DEFAULT_SCHOOL);
@@ -77,12 +79,28 @@ const classes = CLASSES.map((c, i) => ({
   adviser: teachers[i].id, room: "R-" + (101 + i), capacity: 40, strand: "",
 }));
 
+// ---------- Subjects, and the grade levels that take them ----------
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => `G${a + i}`);
+const KINDER = ["N", "PK", "K"], SHS = ["G11", "G12"];
 const subjects = SUBJECTS.map((s, i) => ({
   id: "SUB-" + (301 + i), name: s, code: s.slice(0, 3).toUpperCase() + "-" + (101 + i),
   teacher: (teachers.find((t) => t.subject === s) || teachers[0]).name,
   type: ["Science", "Computer", "Art", "Physical Ed."].includes(s) ? "Practical" : "Theory",
-  classes: "Grades 1–6",
+  grades: s === "Mathematics" ? [...KINDER, ...range(1, 10)] : range(1, 10), strands: [],
 }));
+/** Sample subjects for the other levels: Kinder learning domains and Senior High core and strand subjects. */
+export const SUBJECT_CATALOG = [
+  ["Language, Literacy and Communication", "KLLC", KINDER], ["Socio-Emotional Development", "KSED", KINDER],
+  ["Values Development", "KVD", KINDER], ["Physical Health and Motor Development", "KPHMD", KINDER],
+  ["Aesthetic and Creative Development", "KACD", KINDER], ["Understanding the Physical and Natural Environment", "KUPNE", KINDER],
+  ["Oral Communication", "SHS-OC", SHS], ["General Mathematics", "SHS-GM", SHS], ["Earth and Life Science", "SHS-ELS", SHS],
+  ["Physical Education and Health", "SHS-PEH", SHS], ["Personal Development", "SHS-PD", SHS], ["Understanding Culture, Society and Politics", "SHS-UCSP", SHS],
+  ["Pre-Calculus", "STEM-PC", SHS, ["STEM"]], ["General Biology 1", "STEM-GB1", SHS, ["STEM"]],
+  ["Business Mathematics", "ABM-BM", SHS, ["ABM"]], ["Fundamentals of ABM 1", "ABM-F1", SHS, ["ABM"]],
+  ["Creative Writing", "HUM-CW", SHS, ["HUMSS"]], ["Philippine Politics and Governance", "HUM-PPG", SHS, ["HUMSS"]],
+  ["Humanities 1", "GAS-H1", SHS, ["GAS"]], ["Computer Systems Servicing", "TVL-CSS", SHS, ["TVL"]],
+].map(([name, code, grades, strands = []], i) => ({ id: "SUB-" + (310 + i), name, code, teacher: "", type: "Theory", grades, strands }));
+subjects.push(...SUBJECT_CATALOG);
 
 // Who teaches a subject in a class: subjects with two teachers are split, 01–03 → first, 04–06 → second.
 const teacherOf = (cls, subject) => {

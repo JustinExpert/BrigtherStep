@@ -1,8 +1,8 @@
 // What a valid record looks like, per collection. Every add/update is checked here before it's saved,
 // so wrong data (a grade of 150, a student without a name, a score for a student who doesn't exist)
 // never reaches the database. The rules match the app's forms.
-import { GRADUATED, SUBJECTS, TERMS } from "../../src/constants.js";
-import { gradeOf, levelOf } from "../../src/levels.js";
+import { GRADUATED, TERMS } from "../../src/constants.js";
+import { gradeLabel, gradeOf, levelOf, offers, sectionLabel } from "../../src/levels.js";
 import { COMPONENTS } from "../../src/lib/gradeCalc.js";
 import { bad } from "./access.js";
 
@@ -13,8 +13,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 const yearsFromToday = (n) => `${Number(today().slice(0, 4)) + n}${today().slice(4)}`;
 
 // ---------- Field rules ----------
-// { label, type, required, max, oneOf, min, maxValue, integer, after, before, pattern }
+// { label, type, required, max, oneOf, min, maxValue, integer, after, before, pattern, subject }
+// type "list" = an array of short texts (each one of `oneOf`); `subject: true` = one of the school's subjects.
 const text = (label, max, more = {}) => ({ label, type: "string", max, ...more });
+const list = (label, more = {}) => ({ label, type: "list", ...more });
+const SUBJECT = (max = 60) => req(text("Subject", max, { subject: true }));
 const req = (rule) => ({ ...rule, required: true });
 const date = (label, more = {}) => ({ label, type: "date", ...more });
 const num = (label, min, maxValue, more = {}) => ({ label, type: "number", min, maxValue, ...more });
@@ -41,7 +44,7 @@ const RULES = {
   teachers: {
     name: req(text("Full name", 100)),
     gender: text("Gender", 10, { oneOf: ["Male", "Female"] }),
-    subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
+    subject: SUBJECT(),
     phone: req(text("Phone", 30, { pattern: PHONE })),
     email: req(text("Email", 254, { pattern: EMAIL })),
     joined: req(date("Joining date", { after: "1950-01-01", before: () => yearsFromToday(1) })),
@@ -60,12 +63,14 @@ const RULES = {
     capacity: num("Capacity", 1, 200, { integer: true }),
     strand: text("Strand", 20, { oneOf: (ctx) => ["", ...(ctx.settings.school.strands || [])] }),
   },
+  // A subject and the grade levels that take it (Senior High: optionally only some strands).
   subjects: {
-    name: req(text("Subject name", 60)),
+    name: req(text("Subject name", 60, { pattern: /^[^|$]+$/ })),
     code: req(text("Code", 20)),
     teacher: text("Teacher", 100, { ref: "teacherName" }),
     type: text("Type", 20, { oneOf: ["Theory", "Practical"] }),
-    classes: req(text("Classes", 40)),
+    grades: req(list("Grade levels", { oneOf: (ctx) => ctx.levels.flatMap((l) => levelOf(l).grades.map((g) => g.key)) })),
+    strands: list("Strands", { oneOf: (ctx) => ctx.settings.school.strands || [] }),
   },
   notices: {
     title: req(text("Title", 150)),
@@ -77,13 +82,13 @@ const RULES = {
   },
   assignments: {
     class: req(text("Section", 40, { ref: "currentSection" })),
-    subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
+    subject: SUBJECT(),
     teacherId: req(text("Teacher", 40, { ref: "teacher" })),
   },
   grades: {
     studentId: req(text("Student", 40, { ref: "student" })),
     class: req(text("Section", 40, { ref: "section" })),
-    subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
+    subject: SUBJECT(),
     term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
     score: req(num("Grade", 0, 100)),
     published: req({ label: "Published", type: "boolean" }),
@@ -91,7 +96,7 @@ const RULES = {
   },
   activities: {
     class: req(text("Section", 40, { ref: "section" })),
-    subject: req(text("Subject", 40, { oneOf: SUBJECTS })),
+    subject: SUBJECT(),
     term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
     year: req(text("School year", 9)),
     component: req(text("Component", 4, { oneOf: COMPONENTS.map((c) => c.key) })),
@@ -126,6 +131,7 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
         const options = typeof r.oneOf === "function" ? r.oneOf(ctx) : r.oneOf;
         if (options && !options.includes(v)) fail(`must be one of: ${options.filter(Boolean).join(", ")}`);
         if (r.pattern && !r.pattern.test(v)) fail("isn't valid");
+        if (r.subject && !ctx.subjectByName.has(v)) fail(`"${v}" isn't one of the school's subjects (see the Subjects page)`);
         if (r.ref === "student") refs.students.add(v);
         if (r.ref === "teacher") refs.teachers.add(v);
         if (r.ref === "teacherName") refs.teacherNames.add(v);
@@ -144,6 +150,15 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
         if (r.integer && !Number.isInteger(v)) fail("must be a whole number");
         if (v < r.min || v > r.maxValue) fail(`must be between ${r.min} and ${r.maxValue}`);
         break;
+      case "list": {
+        if (!Array.isArray(v) || v.length > 60 || v.some((x) => typeof x !== "string")) fail("must be a list");
+        if (new Set(v).size !== v.length) fail("lists the same item twice");
+        const options = typeof r.oneOf === "function" ? r.oneOf(ctx) : r.oneOf;
+        const wrong = options && v.find((x) => !options.includes(x));
+        if (wrong !== undefined) fail(`can't include "${wrong}"`);
+        if (r.required && !v.length) fail("needs at least one");
+        break;
+      }
       case "boolean":
         if (typeof v !== "boolean") fail("must be true or false");
         break;
@@ -163,6 +178,12 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
     const g = gradeOf(merged.grade);
     if (!g || g.level !== merged.level) bad(`${merged.grade} isn't a grade level in ${levelOf(merged.level)?.label || merged.level}.`);
     if (merged.strand && !levelOf(merged.level)?.strands) bad("Only Senior High sections have a strand.");
+  }
+  if (col === "subjects" && merged.strands?.length && !merged.grades.some((g) => levelOf(gradeOf(g)?.level)?.strands)) bad("Only Senior High subjects can be limited to some strands.");
+  // Teaching, grades and activities: the section must take the subject (its grade level, and strand in Senior High).
+  if (["assignments", "grades", "activities"].includes(col) && ctx.sections.has(merged.class) && ctx.subjectByName.has(merged.subject)) {
+    const sec = ctx.sections.get(merged.class);
+    if (!offers(ctx.subjectByName.get(merged.subject), sec)) bad(`${sectionLabel(sec)} doesn't take ${merged.subject}. Add ${gradeLabel(sec.grade)}${sec.strand ? ` (${sec.strand})` : ""} to the subject on the Subjects page first.`);
   }
   return refs;
 }
@@ -193,7 +214,7 @@ export async function checkRefs(db, refs, ctx) {
 const SCHOOL_KEYS = ["name", "motto", "address", "phone", "email", "website", "academicYear", "pastYears", "passingMark", "grading", "weights", "transmutation", "strands"];
 
 /** Checks the whole school profile as it will be saved (School Setup). */
-export function checkSchool(patch, school) {
+export function checkSchool(patch, school, ctx) {
   for (const k of Object.keys(patch)) if (!SCHOOL_KEYS.includes(k)) bad(`Unknown school setting "${k}".`);
   const s = school;
   const t = (v, label, max, required) => {
@@ -218,7 +239,7 @@ export function checkSchool(patch, school) {
   if (!s.grading.some((g) => g.min === 0)) bad("The lowest grade must start at 0%.");
   if (!isObj(s.weights)) bad("Grade weights are missing.");
   for (const [subject, w] of Object.entries(s.weights)) {
-    if (!SUBJECTS.includes(subject)) bad(`Grade weights: unknown subject "${subject}".`);
+    if (!ctx.subjectByName.has(subject)) bad(`Grade weights: unknown subject "${subject}".`);
     if (!isObj(w) || Object.keys(w).some((k) => !COMPONENTS.some((c) => c.key === k))) bad(`Grade weights for ${subject} are invalid.`);
     const vals = COMPONENTS.map((c) => w[c.key]);
     if (vals.some((v) => typeof v !== "number" || v < 0 || v > 100)) bad(`Grade weights for ${subject} must each be from 0 to 100.`);

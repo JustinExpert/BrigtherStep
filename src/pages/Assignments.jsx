@@ -2,8 +2,7 @@ import { useAuth } from "../lib/AuthContext.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
-import { SUBJECTS } from "../constants.js";
-import { useSections } from "../lib/sections.js";
+import { useSections, useSubjects } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
 import { PageHead, StatTile } from "../components/ui.jsx";
 import Select from "../components/Select.jsx";
@@ -12,7 +11,7 @@ const NONE = "";
 
 export default function Assignments() {
   const { user } = useAuth();
-  const { assignments, teachers, students, upsertMany, remove, routine } = useData();
+  const { assignments, teachers, students, upsertMany, remove } = useData();
   const { toast } = useUI();
   const canEdit = usePermission()("assignments", "edit");
   const sections = useSections();
@@ -21,8 +20,11 @@ export default function Assignments() {
   const label = sections.label;
   const find = (cls, subject) => assignments.find((a) => a.class === cls && a.subject === subject);
   const name = (id) => teachers.find((t) => t.id === id)?.name || "—";
-  // Subjects each section takes (from its timetable); a section without a timetable yet can take any subject.
-  const takes = (cls, subject) => !routine[cls] || routine[cls].flat().some((s) => s.subject === subject);
+  // Subjects each section takes: those set for its grade level (and strand) on the Subjects page.
+  const subjects = useSubjects();
+  const offered = Object.fromEntries(CLASSES.map((c) => [c, subjects.forSection(c)]));
+  const takes = (cls, subject) => offered[cls].includes(subject);
+  const SUBJECTS = subjects.names.filter((n) => CLASSES.some((c) => takes(c, n)));
 
   const assign = (cls, subject, teacherId) => {
     const current = find(cls, subject);
@@ -62,7 +64,7 @@ export default function Assignments() {
         <div className="card-head">
           <div>
             <h3>Who teaches what</h3>
-            <p>Each section takes the subjects on its timetable. A teacher sees only the students and grades of the sections they're assigned here.</p>
+            <p>Each section takes the subjects set for its grade level on the Subjects page. A teacher sees only the students and grades of the sections they're assigned here.</p>
           </div>
         </div>
         <div className="table-wrap">

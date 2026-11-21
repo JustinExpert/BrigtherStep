@@ -1,7 +1,7 @@
 // Simple list pages built on the generic CrudPage.
-import { SUBJECTS, AVATAR_COLORS } from "../constants.js";
-import { levelOf } from "../levels.js";
-import { useSections } from "../lib/sections.js";
+import { AVATAR_COLORS } from "../constants.js";
+import { gradeLabel, gradeOf, levelOf } from "../levels.js";
+import { useSections, useSubjects } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
 import { useData } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
@@ -14,6 +14,7 @@ const who = (r) => <div className="who"><Avatar name={r.name} color={r.color} />
 export function Teachers() {
   const { openModal } = useUI();
   const sections = useSections();
+  const SUBJECTS = useSubjects().names;
   // The sections each teacher advises this school year (set on the Sections page).
   const advises = (t) => sections.current.filter((c) => c.adviser === t.id).map((c) => sections.label(c.id)).join(", ") || "—";
   return (
@@ -92,24 +93,46 @@ export function Classes() {
   );
 }
 
+/**
+ * The school's subjects for the chosen level, and which grade levels (and Senior High strands) take each one.
+ * A subject can span levels (e.g. Mathematics, Kinder to Grade 10): editing it here only changes this level's grades.
+ */
 export function Subjects() {
-  const { teachers } = useData();
+  const { teachers, school } = useData();
+  const { level } = useLevel();
+  const subjects = useSubjects();
+  const info = levelOf(level);
+  const grades = info?.grades || [];
+  const inLevel = (g) => gradeOf(g)?.level === level;
+  const strandField = info?.strands ? [{ key: "strands", label: "Strands", type: "checks", options: school.strands || [], hint: "Leave all unticked for a core subject that every strand takes." }] : [];
   return (
     <CrudPage
-      collection="subjects" module="subjects" title="Subject" singular="Subject" listTitle="All Subjects"
+      collection="subjects" module="subjects" title="Subjects" singular="Subject" crumbs={["Subjects"]}
+      listTitle={`${info?.label || "All"} subjects`}
+      rowFilter={(r) => subjects.ofLevel(level).some((x) => x.id === r.id)}
+      defaults={{ type: "Theory", teacher: "", grades: grades.map((g) => g.key), strands: [] }}
+      prepare={(vals, row) => ({
+        ...vals,
+        // Keep the grade levels this subject has in other levels; only this level's ticks change.
+        grades: [...(row?.grades || []).filter((g) => !inLevel(g)), ...vals.grades],
+        ...(info?.strands ? {} : { strands: row?.strands || [] }),
+      })}
+      filter={{ key: "type", label: "All types", options: ["Theory", "Practical"] }}
       fields={[
         { key: "name", label: "Subject name", required: true },
         { key: "code", label: "Code", required: true },
-        { key: "teacher", label: "Teacher", type: "select", options: teachers.map((t) => t.name) },
+        { key: "teacher", label: "Subject coordinator", type: "select", options: [{ value: "", label: "— None —" }, ...teachers.map((t) => ({ value: t.name, label: t.name, hint: t.subject }))] },
         { key: "type", label: "Type", type: "select", options: ["Theory", "Practical"] },
-        { key: "classes", label: "Classes", required: true },
+        { key: "grades", label: `Grade levels (${info?.label || ""})`, type: "checks", required: true, options: grades.map((g) => ({ value: g.key, label: g.label })) },
+        ...strandField,
       ]}
       cols={[
         { key: "name", label: "Subject", render: (r) => <b>{r.name}</b> },
         { key: "code", label: "Code" },
-        { key: "teacher", label: "Teacher" },
+        { key: "grades", label: "Grade levels", sortable: false, render: (r) => r.grades.filter(inLevel).map(gradeLabel).join(", ") },
+        ...(info?.strands ? [{ key: "strands", label: "Strands", sortable: false, render: (r) => (r.strands?.length ? r.strands.map((x) => <Badge key={x} value={x} cls="b-purple" />) : <span className="muted">Core (all)</span>) }] : []),
         { key: "type", label: "Type", render: (r) => <Badge value={r.type} /> },
-        { key: "classes", label: "Classes" },
+        { key: "teacher", label: "Coordinator", render: (r) => r.teacher || "—" },
       ]}
     />
   );
