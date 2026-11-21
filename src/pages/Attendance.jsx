@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useScope } from "../lib/scope.js";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { todayIso } from "../lib/utils.js";
@@ -21,12 +21,17 @@ export default function Attendance() {
   const key = `${cls}|${date}`;
   const list = students.filter((s) => s.class === cls).sort((a, b) => a.roll.localeCompare(b.roll));
   const [marks, setMarks] = useState({});
+  // The class's saved attendance for the school year loads from the server when it's chosen.
+  const view = useView(cls ? { view: "class", class: cls, parts: "attendance" } : null);
+  const ready = !view.loading && !view.error;
 
-  // Load saved marks (or default everyone to Present) when class/date changes.
+  // Show saved marks (or default everyone to Present) once they've loaded, and when class/date changes.
+  // Waiting matters: defaulting before the saved marks arrive would let a save overwrite them.
   useEffect(() => {
+    if (!ready) return;
     setMarks(attendance[key] || Object.fromEntries(list.map((s) => [s.id, "P"])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, ready]);
 
   const count = (v) => list.filter((s) => marks[s.id] === v).length;
   const saved = !!attendance[key];
@@ -43,8 +48,8 @@ export default function Attendance() {
     <>
       <PageHead title="Attendance" crumbs={["Attendance"]}>
         {canEdit ? (
-          <button className="btn" onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for Class ${cls}`); }}>
-            {saved ? "Update attendance" : "Save attendance"}
+          <button className="btn" disabled={!ready} title={view.error || undefined} onClick={() => { saveAttendance(key, marks); toast(`Attendance saved for Class ${cls}`); }}>
+            {view.loading ? "Loading…" : saved ? "Update attendance" : "Save attendance"}
           </button>
         ) : <span className="badge b-blue">View only</span>}
       </PageHead>

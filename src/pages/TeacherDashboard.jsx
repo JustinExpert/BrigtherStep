@@ -1,18 +1,18 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { DATA } from "../constants.js";
 import { teacherWeek, useScope, useVisibleNotices } from "../lib/scope.js";
-import { useStudentStats } from "../lib/useStudentStats.js";
 import { Badge, StatTile } from "../components/ui.jsx";
 import { NoticeFeed } from "./AdminDashboard.jsx";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
-  const { students, teachers, grades, assignments, routine } = useData();
+  const { students, teachers, assignments, routine } = useData();
   const notices = useVisibleNotices();
   const scope = useScope();
-  const stats = useStudentStats();
+  // Draft grades and low-attendance students are counted by the database for this teacher's classes.
+  const summary = useView({ view: "summary" });
   // Admins previewing this page see the first teacher's view.
   const me = teachers.find((t) => t.id === user.teacherId) || (user.role !== "teacher" ? teachers[0] : null);
   if (!me) return <div className="card empty">Your account isn't linked to a staff record yet. Please ask the school admin.</div>;
@@ -23,10 +23,12 @@ export default function TeacherDashboard() {
   const dayIdx = Math.min(Math.max(new Date().getDay() - 1, 0), 4);
   const today = teacherWeek(routine, assignments, me.id)[dayIdx];
   const periodsOf = (a) => routine[a.class].flat().filter((s) => s.subject === a.subject).length;
-  const drafts = grades.filter((g) => !g.published && mine.some((a) => a.class === g.class && a.subject === g.subject)).length;
+  const drafts = summary.data?.drafts ?? "—"; // only counted for teachers' own accounts (admins previewing see "—")
   // Students whose recorded attendance this school year is under 88%, lowest first.
-  const rateOf = (s) => stats.get(s.id)?.attendance.rate ?? null;
-  const attention = myStudents.filter((s) => rateOf(s) !== null && rateOf(s) < 88).sort((a, b) => rateOf(a) - rateOf(b));
+  const byId = new Map(myStudents.map((s) => [s.id, s]));
+  const low = new Map((summary.data?.lowAttendance || []).map((x) => [x.studentId, x]));
+  const rateOf = (s) => low.get(s.id)?.rate ?? null;
+  const attention = [...low.keys()].filter((id) => byId.has(id)).map((id) => byId.get(id));
 
   return (
     <>
@@ -84,11 +86,13 @@ export default function TeacherDashboard() {
           <div className="feed">
             {attention.slice(0, 6).map((s) => (
               <div className="feed-item" key={s.id}>
-                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Class {s.class} · attendance {rateOf(s)}% ({stats.get(s.id).attendance.absent} absent)</p></div>
+                <div><h5><Link to={`/students/${s.id}`}>{s.name}</Link></h5><p>Class {s.class} · attendance {rateOf(s)}% ({low.get(s.id).absent} absent)</p></div>
                 <time><Badge value="Below 88%" cls="b-red" /></time>
               </div>
             ))}
-            {!attention.length && <p className="empty">Everyone is on track 🎉</p>}
+            {summary.loading ? <p className="hint" role="status">Loading…</p>
+              : summary.error ? <div className="alert error" role="alert">{summary.error}</div>
+              : !attention.length && <p className="empty">Everyone is on track 🎉</p>}
           </div>
         </div>
         <div className="card">

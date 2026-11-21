@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { downloadBlob, todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
@@ -10,7 +10,8 @@ const MAX_FILE = 20 * 1024 * 1024;
 /** Super Admin: download all data as a file, or restore it (e.g. to move data to another browser). */
 export default function Backup() {
   const data = useData();
-  const { exportBackup, restoreBackup, students, users, grades, activities, notices } = data;
+  const { exportBackup, restoreBackup, students, users, notices } = data;
+  const counts = useView({ view: "summary" }).data?.counts; // all school years, counted by the server
   const { toast, confirm } = useUI();
   const fileRef = useRef();
   const [error, setError] = useState("");
@@ -45,7 +46,7 @@ export default function Backup() {
       <div className="stat-grid">
         <StatTile label="Students" value={students.length} icon="cap" tone="purple" />
         <StatTile label="Accounts" value={users.length} icon="teachers" tone="blue" />
-        <StatTile label="Grade records" value={grades.length + activities.length} icon="exam" tone="orange" />
+        <StatTile label="Grade records" value={counts ? counts.grades + counts.activities : "…"} icon="exam" tone="orange" />
         <StatTile label="Announcements" value={notices.length} icon="notice" tone="green" />
       </div>
       <div className="grid-2">

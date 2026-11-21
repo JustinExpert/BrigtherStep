@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { CLASSES, AVATAR_COLORS } from "../constants.js";
 import { fmtDate } from "../lib/utils.js";
@@ -86,6 +86,8 @@ export function StudentDetails({ selfId }) {
   const scope = useScope();
   const data = useData();
   const s = students.find((x) => x.id === id);
+  // Staff: this student's grades and attendance load from the server (a student's own profile already has them).
+  const view = useView(s && !selfId && scope.inScope(s.class) ? { view: "student", id: s.id } : null);
   // Teachers may only open students in the classes they teach.
   if (s && !selfId && !scope.inScope(s.class)) {
     return <div className="card empty">This student isn't in any of the classes you teach. <Link className="link" to="/students">Back to my students</Link></div>;
@@ -118,8 +120,8 @@ export function StudentDetails({ selfId }) {
           <span style={{ color: "var(--muted)" }}>{s.id} · Class {s.class} · Roll {s.roll}</span>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}><Badge value={s.gender} /></div>
           <div className="stat-grid" style={{ gridTemplateColumns: "1fr 1fr", width: "100%", marginTop: 18, gap: 12 }}>
-            <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{pct(attendanceRate(attendanceLog(data.attendance, s)))}</b></div></div>
-            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>General avg.</span><b style={{ fontSize: 22 }}>{average ?? "—"}</b></div></div>
+            <div className="stat-tile tone-purple" style={{ padding: 16 }}><div><span>Attendance</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : pct(attendanceRate(attendanceLog(data.attendance, s)))}</b></div></div>
+            <div className="stat-tile tone-orange" style={{ padding: 16 }}><div><span>General avg.</span><b style={{ fontSize: 22 }}>{view.loading ? "…" : average ?? "—"}</b></div></div>
           </div>
         </div>
         <div className="card">
@@ -135,7 +137,9 @@ export function StudentDetails({ selfId }) {
           </dl>
         </div>
       </div>
-      <ReportCardView student={s} />
+      {view.loading ? <div className="card"><p className="hint" role="status">Loading grades and attendance…</p></div>
+        : view.error ? <div className="alert error" role="alert">{view.error}</div>
+        : <ReportCardView student={s} />}
     </>
   );
 }

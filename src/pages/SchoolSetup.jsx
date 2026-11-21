@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { EMAIL_RE } from "../lib/crypto.js";
@@ -13,7 +13,7 @@ const nextYearDate = (iso) => `${Number(iso.slice(0, 4)) + 1}${iso.slice(4)}`;
 
 /** Closes the open school year and opens the next one, optionally moving every student up a class. */
 function NewYearForm({ onDone, onCancel }) {
-  const { school, grades, startNewYear } = useData();
+  const { school, startNewYear } = useData();
   const { toast } = useUI();
   const cur = school.academicYear;
   const [f, setF] = useState(() => {
@@ -22,7 +22,7 @@ function NewYearForm({ onDone, onCancel }) {
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const drafts = grades.filter((g) => !g.published).length;
+  const drafts = useView({ view: "summary" }).data?.drafts || 0; // counted by the server for the whole school
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   const submit = async (e) => {

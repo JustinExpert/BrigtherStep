@@ -19,6 +19,7 @@ export function DataProvider({ children }) {
   const [state, setState] = useState(EMPTY);
   const [status, setStatus] = useState("idle"); // idle | loading | ready | error
   const [publicInfo, setPublicInfo] = useState(null); // school name + totals for the sign-in page
+  const [epoch, setEpoch] = useState(0); // goes up on every full reload, so pages re-fetch their own data
   const queue = useRef(Promise.resolve());
   const loadId = useRef(0);
 
@@ -34,6 +35,7 @@ export function DataProvider({ children }) {
       const { data } = await api("data");
       if (id !== loadId.current) return;
       setState({ db: { ...emptyDb(), ...data.db }, attendance: data.attendance, school: data.school, permissions: data.permissions, routine: data.routine });
+      setEpoch((e) => e + 1);
       setStatus("ready");
     } catch {
       if (id === loadId.current) setStatus("error");
@@ -41,6 +43,31 @@ export function DataProvider({ children }) {
   }, []);
 
   const clear = useCallback(() => { loadId.current++; setState(EMPTY); setStatus("idle"); }, []);
+
+  /**
+   * Loads one page's records (see api/_lib/views.js) into the store. For a gradebook or class the
+   * server's copy replaces what the store had for it, so deleted records disappear too.
+   */
+  const loadView = useCallback(async (params) => {
+    const r = await api(`data?${new URLSearchParams(params)}`);
+    setState((s) => {
+      const keep = {
+        gradebook: { grades: (g) => !(g.class === params.class && g.subject === params.subject), activities: (a) => !(a.class === params.class && a.subject === params.subject) },
+        class: { grades: (g) => g.class !== params.class },
+        student: { grades: (g) => g.studentId !== params.id },
+      }[params.view] || {};
+      const merge = (col) => {
+        if (!r[col]) return s.db[col];
+        const fresh = new Map(r[col].map((x) => [x.id, x]));
+        return [...s.db[col].filter((x) => !fresh.has(x.id) && (keep[col] ? keep[col](x) : true)), ...r[col]];
+      };
+      const attendance = { ...s.attendance };
+      if (params.view === "class") for (const k of Object.keys(attendance)) if (k.startsWith(params.class + "|")) delete attendance[k];
+      for (const [k, marks] of Object.entries(r.attendance || {})) attendance[k] = { ...attendance[k], ...marks };
+      return { ...s, db: { ...s.db, grades: merge("grades"), activities: merge("activities") }, attendance };
+    });
+    return r;
+  }, []);
 
   /** Sends one change to the server, in order. On refusal: show why and reload the true state. */
   const send = useCallback((path, body) => {
@@ -128,11 +155,31 @@ export function DataProvider({ children }) {
       await load();
       return r;
     },
-  }), [load, clear, send]);
+    loadView,
+  }), [load, clear, send, loadView]);
 
-  const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, status, publicInfo, ...actions }),
-    [state, status, publicInfo, actions]);
+  const value = useMemo(() => ({ ...state.db, attendance: state.attendance, school: state.school, permissions: state.permissions, routine: state.routine, status, publicInfo, epoch, ...actions }),
+    [state, status, publicInfo, epoch, actions]);
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
 export const useData = () => useContext(DataContext);
+
+/**
+ * Loads a page's data from the server (e.g. { view: "gradebook", class: "01", subject: "Mathematics" })
+ * into the store, and again after any full reload. Pass null to load nothing.
+ * Returns { loading, error, data } — `data` is the raw response (used for dashboard totals).
+ */
+export function useView(params) {
+  const { loadView, epoch } = useData();
+  const key = params ? JSON.stringify(params) : null;
+  const [res, setRes] = useState({ key: null, error: "", data: null });
+  useEffect(() => {
+    if (!key) return undefined;
+    let live = true;
+    loadView(JSON.parse(key)).then((data) => live && setRes({ key, error: "", data }), (e) => live && setRes({ key, error: e.message, data: null }));
+    return () => { live = false; };
+  }, [key, epoch, loadView]);
+  const current = res.key === key;
+  return { loading: !!key && !current, error: current ? res.error : "", data: current ? res.data : null };
+}

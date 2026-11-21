@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { buildReport, termLabel, useScope } from "../lib/scope.js";
 import { downloadCsv, fmtDate, slug, todayIso } from "../lib/utils.js";
@@ -22,6 +22,9 @@ export default function Reports() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayIso());
   const [term, setTerm] = useState("Q2");
+  // This class's grades and attendance for the school year load from the server when it's chosen.
+  const view = useView(cls ? { view: "class", class: cls } : null);
+  const notReady = view.loading ? "Still loading this class — try again in a moment" : view.error;
 
   if (!scope.classes.length) {
     return (
@@ -51,6 +54,7 @@ export default function Reports() {
   const subjectNames = reports[0]?.rows.map((r) => r.subject) || [];
 
   const exportCsv = () => {
+    if (notReady) return toast(notReady);
     const base = `${slug(classLabel)}-${todayIso()}`;
     if (tab === "attendance") {
       if (badRange) return toast("The start date must be on or before the end date");
@@ -71,10 +75,12 @@ export default function Reports() {
       <PageHead title="Reports" crumbs={["Reports"]}>
         <div className="row-actions print-hide" style={{ gap: 10 }}>
           <button className="btn light" onClick={exportCsv}><Icon name="download" />Export CSV</button>
-          <button className="btn" onClick={() => (tab === "attendance" && badRange ? toast("Fix the date range first") : window.print())}><Icon name="printer" />Print / Save PDF</button>
+          <button className="btn" onClick={() => (notReady ? toast(notReady) : tab === "attendance" && badRange ? toast("Fix the date range first") : window.print())}><Icon name="printer" />Print / Save PDF</button>
         </div>
       </PageHead>
 
+      {view.loading && <p className="hint print-hide" role="status">Loading Class {cls}…</p>}
+      {view.error && <div className="alert error print-hide" role="alert">{view.error}</div>}
       <div className="card print-hide">
         <div className="tabs" role="tablist" style={{ marginBottom: 16 }}>
           {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/AuthContext.jsx";
-import { useData } from "../lib/DataContext.jsx";
+import { useData, useView } from "../lib/DataContext.jsx";
 import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
@@ -62,6 +62,9 @@ export default function Gradebook() {
   const current = options.find((a) => a.id === pick) || options[0];
   const key = current ? `${current.id}|${term}` : "";
   useEffect(() => setEdits({}), [key]);
+  // This class + subject's activities and grades (every quarter) load from the server when it's opened.
+  const view = useView(current ? { view: "gradebook", class: current.class, subject: current.subject } : null);
+  const ready = !view.loading && !view.error;
 
   if (!current) {
     return (
@@ -181,7 +184,7 @@ export default function Gradebook() {
   return (
     <>
       <PageHead title="Gradebook" crumbs={["Grades", `Gradebook · School year ${school.academicYear.label}`]}>
-        {canEdit && (
+        {canEdit && ready && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {isPublished && !dirty && <button className="btn light" onClick={unpublish}>Unpublish</button>}
             <button className="btn light" onClick={saveScores} disabled={!dirty}>Save scores</button>
@@ -215,6 +218,9 @@ export default function Gradebook() {
         </p>
       </div>
 
+      {!ready ? (
+        <div className="card">{view.error ? <div className="alert error" role="alert">{view.error}</div> : <p className="hint" role="status">Loading Class {current.class} · {current.subject}…</p>}</div>
+      ) : (<>
       <div className="stat-grid">
         <StatTile label="Activities" value={acts.length} icon="list" tone="purple" />
         <StatTile label="Class average" value={avg === null ? "—" : `${fmt(Math.round(avg * 10) / 10)} · ${gradeFor(school, avg).grade}`} icon="chart" tone="blue" />
@@ -313,6 +319,7 @@ export default function Gradebook() {
         </div>
         )}
       </div>
+      </>)}
     </>
   );
 }

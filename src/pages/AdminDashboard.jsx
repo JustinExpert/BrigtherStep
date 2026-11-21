@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useData } from "../lib/DataContext.jsx";
-import { monthlyAttendance, pct } from "../lib/stats.js";
-import { useStudentStats } from "../lib/useStudentStats.js";
+import { monthlyFromTotals, pct } from "../lib/stats.js";
+import { useView } from "../lib/DataContext.jsx";
 import { compact, relTime } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -26,18 +26,16 @@ export function NoticeFeed({ notices, limit = 4 }) {
 }
 
 export default function AdminDashboard() {
-  const { students, teachers, notices, classes, attendance, school } = useData();
+  const { students, teachers, notices, classes, school } = useData();
   const navigate = useNavigate();
-  const stats = useStudentStats();
+  // Totals are calculated by the database, so the dashboard never downloads every grade or attendance record.
+  const summary = useView({ view: "summary" });
   const male = students.filter((s) => s.gender === "Male").length;
   const parents = new Set(students.map((s) => s.parent)).size;
   // Top 5 by general average of this year's published grades.
-  const stars = students
-    .map((s) => ({ ...s, average: stats.get(s.id)?.average ?? null, attendanceRate: stats.get(s.id)?.attendance.rate ?? null }))
-    .filter((s) => s.average !== null)
-    .sort((a, b) => b.average - a.average || a.name.localeCompare(b.name))
-    .slice(0, 5);
-  const chart = monthlyAttendance(attendance, school.academicYear);
+  const byId = new Map(students.map((s) => [s.id, s]));
+  const stars = (summary.data?.stars || []).filter((x) => byId.has(x.studentId)).map((x) => ({ ...byId.get(x.studentId), average: x.average, attendanceRate: x.attendanceRate }));
+  const chart = monthlyFromTotals(summary.data?.monthly, school.academicYear);
   const hasAttendance = chart.values.some((v) => v !== null);
 
   return (
@@ -58,9 +56,11 @@ export default function AdminDashboard() {
             <div><h3>Attendance Overview</h3><p>Students present (incl. late), monthly · S.Y. {school.academicYear.label}</p></div>
             <div className="legend"><span><i style={{ background: "#7b2cdf" }} />Students</span></div>
           </div>
-          {hasAttendance
-            ? <GroupedBarChart labels={chart.labels} series={[{ key: "s", label: "Students", color: "#7b2cdf", values: chart.values }]} />
-            : <p className="empty">No attendance has been recorded this school year yet. It appears here as teachers take attendance.</p>}
+          {summary.loading ? <p className="hint" role="status">Loading…</p>
+            : summary.error ? <div className="alert error" role="alert">{summary.error}</div>
+            : hasAttendance
+              ? <GroupedBarChart labels={chart.labels} series={[{ key: "s", label: "Students", color: "#7b2cdf", values: chart.values }]} />
+              : <p className="empty">No attendance has been recorded this school year yet. It appears here as teachers take attendance.</p>}
         </div>
         <div className="card">
           <div className="card-head"><h3>Students</h3><button className="icon-btn" onClick={() => navigate("/students")} aria-label="Open students"><Icon name="more" /></button></div>

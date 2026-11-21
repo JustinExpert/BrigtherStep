@@ -94,15 +94,13 @@ const audienceClass = (aud) => (aud && aud !== WHOLE_SCHOOL ? String(aud).replac
 const SECRET_FIELDS = { passwordHash: 0, salt: 0, resetTokenHash: 0, resetExpires: 0 };
 const TEACHER_CARD = { name: 1, subject: 1, class: 1, gender: 1, color: 1, photo: 1 };
 const audienceFilter = (classes) => ({ $or: [{ audience: { $in: [null, "", WHOLE_SCHOOL] } }, { audience: { $exists: false } }, { audience: { $in: [...classes].flatMap((c) => [`Class ${c}`, c]) } }] });
-/** class+subject pairs as a MongoDB filter (matches nothing when there are none). */
-const pairFilter = (pairs) => (pairs.size ? { $or: [...pairs].map((p) => { const [cls, subject] = p.split("|"); return { class: cls, subject }; }) } : { _id: null });
 
 /** The open school year's key, e.g. "2026-2027". */
 export const currentYear = (settings) => settings.school.academicYear?.key;
 export const ownStudentIds = (user) => (user.role === "student" ? [user.studentId].filter(Boolean) : user.childIds || []);
 
 /** Which grades this user may read, before the school-year filter (null = none). */
-function gradeFilter(ctx, user) {
+export function gradeFilter(ctx, user) {
   if (ctx.isAdmin) return ctx.can("grades") ? {} : null;
   if (user.role === "teacher") return ctx.can("grades") ? { class: { $in: [...ctx.scope.classes] } } : null; // taught classes + homeroom
   return { studentId: { $in: ownStudentIds(user) }, published: true };
@@ -144,16 +142,16 @@ export async function bootstrap(user) {
   let ownStudents = null; // students/parents: only these students' marks
 
   if (isAdmin || user.role === "teacher") {
-    const classes = [...scope.classes];
+    // Staff: grades, gradebook activities and attendance are the bulk of a school's data, so they
+    // load per page (api/_lib/views.js: one class, one student, or dashboard totals), not here.
     q = {
       students: can("students") ? find("students") : none(),
       teachers: can("teachers") ? find("teachers") : find("teachers", {}, TEACHER_CARD),
-      grades: grades(),
-      activities: !can("grades") ? none() : find("activities", { ...(isAdmin ? {} : pairFilter(scope.pairs)), year }),
+      grades: none(),
+      activities: none(),
       notices: find("notices", { ...(isAdmin ? {} : audienceFilter(scope.classes)), year }),
       users: can("users") ? find("users", {}, SECRET_FIELDS) : Promise.resolve([self]),
     };
-    if (can("attendance")) attendanceFilter = { ...(isAdmin ? {} : { class: { $in: classes } }), year };
   } else {
     // Students and parents: only their own (or their children's) records.
     ownStudents = ownStudentIds(user);

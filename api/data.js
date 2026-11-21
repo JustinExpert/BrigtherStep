@@ -4,6 +4,7 @@
 import { currentUser } from "./_lib/auth.js";
 import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, checkScope, checkYear, clean, context, deny, gradesForYear, loadSettings, toClient } from "./_lib/access.js";
 import { getClient } from "./_lib/db.js";
+import { loadView } from "./_lib/views.js";
 import { CLASSES, DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
       const params = new URL(req.url, "http://x").searchParams;
       if (params.get("backup")) return send(res, 200, { ok: true, backup: await exportBackup(user) });
       if (params.get("year")) return send(res, 200, { ok: true, grades: await gradesForYear(user, params.get("year")) });
+      if (params.get("view")) return send(res, 200, { ok: true, ...(await loadView(user, params)) });
       return send(res, 200, { ok: true, data: await bootstrap(user) });
     }
 
