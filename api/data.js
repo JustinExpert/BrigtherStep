@@ -5,6 +5,7 @@ import { currentUser } from "./_lib/auth.js";
 import { COLLECTIONS, HttpError, MODULE_OF, VALID, bad, bootstrap, checkId, checkScope, checkYear, clean, context, deny, gradesForYear, loadSettings, toClient } from "./_lib/access.js";
 import { getClient } from "./_lib/db.js";
 import { loadView } from "./_lib/views.js";
+import { checkRecord, checkRefs, checkSchool, newRefs } from "./_lib/schema.js";
 import { CLASSES, DATA, SEED } from "../src/data.js";
 import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
@@ -65,6 +66,7 @@ async function mutate(user, body) {
       if (body.col === "notices") Object.assign(item, { author: user.name, authorId: user._id, year: ctx.settings.school.academicYear.key });
       checkScope(ctx, user, body.col, item);
       checkYear(ctx, body.col, { ...item, _id: id });
+      await checkRefs(db, checkRecord(body.col, item, item, ctx));
       try { await coll.insertOne({ _id: id, ...item }); } catch (e) { if (e?.code === 11000) bad("A record with this id already exists."); throw e; }
       return { record: toClient({ _id: id, ...item }) };
     }
@@ -82,6 +84,8 @@ async function mutate(user, body) {
       checkScope(ctx, user, body.col, { ...existing, ...patch });
       checkYear(ctx, body.col, existing);
       checkYear(ctx, body.col, { ...existing, ...patch });
+      await checkRefs(db, checkRecord(body.col, patch, { ...existing, ...patch }, ctx));
+      if (body.col === "grades" && ["studentId", "subject", "term", "year"].some((k) => k in patch && patch[k] !== existing[k])) bad("A grade's student, subject, quarter and year can't be changed.");
       if (Object.keys(patch).length) await coll.updateOne({ _id: id }, { $set: patch });
       return {};
     }
@@ -106,6 +110,7 @@ async function mutate(user, body) {
       const items = body.items.map((it) => clean(it));
       const ids = items.map((it) => checkId(body.col, it?.id));
       const existing = new Map((await coll.find({ _id: { $in: ids } }).toArray()).map((r) => [r._id, r]));
+      const refs = newRefs(); // collected for the whole batch, then checked with one query per kind
       const ops = items.map(({ id, ...rest }) => {
         const before = existing.get(id);
         checkScope(ctx, user, body.col, before);
@@ -113,8 +118,12 @@ async function mutate(user, body) {
         const after = { ...before, ...rest, _id: id };
         checkScope(ctx, user, body.col, after);
         checkYear(ctx, body.col, after);
+        checkRecord(body.col, rest, after, ctx, refs);
+        // A grade's id is "year|student|subject|quarter": it must agree with its fields.
+        if (body.col === "grades" && id !== `${after.year}|${after.studentId}|${after.subject}|${after.term}`) bad("A grade's id doesn't match its student, subject, quarter and year.");
         return { replaceOne: { filter: { _id: id }, replacement: after, upsert: true } };
       });
+      await checkRefs(db, refs);
       if (ops.length) await coll.bulkWrite(ops, { ordered: true });
       return {};
     }
@@ -141,7 +150,9 @@ async function mutate(user, body) {
       // The year's label and dates can be edited; its key and the list of past years change only via "newYear".
       const y = isObj(patch.academicYear) ? patch.academicYear : {};
       const academicYear = { ...school.academicYear, ...pick(y, ["label", "start", "end"]), key: school.academicYear.key };
-      await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: { ...school, ...patch, academicYear, pastYears: school.pastYears || [] } } }, { upsert: true });
+      const next = { ...school, ...patch, academicYear, pastYears: school.pastYears || [] };
+      checkSchool(patch, next);
+      await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true });
       return {};
     }
 
