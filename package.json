@@ -14,7 +14,8 @@
     "db:audit": "node scripts/audit-db.mjs",
     "db:add-past-year": "node scripts/add-past-year.mjs",
     "db:migrate-sections": "node scripts/migrate-sections.mjs",
-    "db:migrate-subjects": "node scripts/migrate-subjects.mjs"
+    "db:migrate-subjects": "node scripts/migrate-subjects.mjs",
+    "db:add-sample-levels": "node scripts/add-sample-levels.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",

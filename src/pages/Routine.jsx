@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { levelOf } from "../levels.js";
 import { DATA } from "../constants.js";
 import { useSections, useSubjects } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
@@ -29,7 +31,9 @@ export default function Routine() {
     setPeriods(next);
     toast(`Period ${pi + 1} now starts at ${t} (all sections)`);
   };
-  const canEdit = usePermission()("routine", "edit");
+  const can = usePermission();
+  const canEdit = can("routine", "edit");
+  const canEditOf = (module) => can(module, "edit");
   const isTeacher = user.role === "teacher";
   // Students open on their own class; parents on their (first) child's class; teachers on their own timetable.
   const ownId = user.role === "student" ? user.studentId : user.role === "parent" ? user.childIds?.[0] : null;
@@ -83,6 +87,26 @@ export default function Routine() {
     const who = teacherFor(assignments, teachers, view, subject);
     return <div className={`slot ${who === "—" ? "unassigned" : ""}`}><b>{subject}</b><small>{who === "—" ? "No teacher assigned" : who}</small><small>{roomOf(view)}</small></div>;
   };
+
+  // A timetable belongs to a section: a level with no sections this year has nothing to show or edit yet.
+  if (!view) {
+    const levelName = levelOf(level)?.label || "this level";
+    return (
+      <>
+        <PageHead title="Timetable" crumbs={["Routine"]} />
+        <div className="card gb-empty">
+          <span className="feed-icon tone-purple"><Icon name="calendar" /></span>
+          <h3>No {levelName} sections this school year</h3>
+          <p>{ownId ? "Your section doesn't have a timetable yet." : isTeacher && !scope.all
+            ? `You aren't assigned to any ${levelName} section yet. Ask the admin to set your teaching assignments.`
+            : `Each section has its own weekly timetable. Create a ${levelName} section first, then come back here and click Edit timetable.`}</p>
+          {canEdit && scope.all && canEditOf("classes") && (
+            <div className="gb-empty-actions"><Link className="btn" to={`/class?level=${level}`}><Icon name="plus" />Add a {levelName} section</Link></div>
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
