@@ -2,7 +2,7 @@
 //   subjects  the old free-text "classes" field ("Grades 1–6") → a list of grade levels (`grades`) and `strands`.
 //             The 9 demo subjects get Grades 1–10 (Mathematics also Nursery to Kindergarten), so their
 //             Elementary sections keep every subject they had. Other subjects get Grades 1–6: check them on the Subjects page.
-//   catalog   sample Kinder learning domains and Senior High subjects are added (only names that don't exist yet).
+//   catalog   sample Kinder learning domains, Senior High and College subjects are added (only names that don't exist yet).
 // Subject names don't change, so grades, activities, assignments and the timetable are untouched.
 //
 // Run: npm run db:migrate-subjects
@@ -36,7 +36,7 @@ try {
   const have = await db.collection("subjects").find({}, { projection: { name: 1 } }).toArray();
   const names = new Set(have.map((s) => s.name.toLowerCase())), ids = new Set(have.map((s) => s._id));
   const add = DATA.subjects.filter((s) => !names.has(s.name.toLowerCase()) && !ids.has(s.id)).map(({ id, ...s }) => ({ _id: id, ...s }));
-  if (add.length) { await db.collection("subjects").insertMany(add); console.log(`Catalog: added ${add.length} Kinder and Senior High subjects.`); }
+  if (add.length) { await db.collection("subjects").insertMany(add); console.log(`Catalog: added ${add.length} sample subjects (Kinder, Senior High, College).`); }
 
   if (!old.length && !add.length) console.log(`Nothing to do: "${dbName}" already has subjects per grade level.`);
   else console.log(`Done. Backup of the changed records: ${backupFile}`);

@@ -100,6 +100,12 @@ export const SUBJECT_CATALOG = [
   ["Creative Writing", "HUM-CW", SHS, ["HUMSS"]], ["Philippine Politics and Governance", "HUM-PPG", SHS, ["HUMSS"]],
   ["Humanities 1", "GAS-H1", SHS, ["GAS"]], ["Computer Systems Servicing", "TVL-CSS", SHS, ["TVL"]],
 ].map(([name, code, grades, strands = []], i) => ({ id: "SUB-" + (310 + i), name, code, teacher: "", type: "Theory", grades, strands }));
+// College: general education subjects every program takes, and a few program subjects (units, semester).
+SUBJECT_CATALOG.push(...[
+  ["Purposive Communication", "GE-PC", 1, 3], ["Mathematics in the Modern World", "GE-MMW", 1, 3], ["Understanding the Self", "GE-US", 2, 3],
+  ["Physical Education 1", "PE-1", 1, 2], ["Introduction to Computing", "IT-101", 1, 3, ["BSIT"]], ["Computer Programming 1", "IT-102", 2, 3, ["BSIT"]],
+  ["Principles of Management", "BA-101", 1, 3, ["BSBA"]], ["The Teaching Profession", "ED-101", 2, 3, ["BEED"]],
+].map(([name, code, semester, units, programs = []], i) => ({ id: "SUB-" + (340 + i), name, code, teacher: "", type: "Theory", grades: ["Y1"], strands: [], units, semester, programs })));
 subjects.push(...SUBJECT_CATALOG);
 
 // Who teaches a subject in a class: subjects with two teachers are split, 01–03 → first, 04–06 → second.

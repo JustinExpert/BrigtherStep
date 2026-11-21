@@ -1,11 +1,12 @@
 // What a valid record looks like, per collection. Every add/update is checked here before it's saved,
 // so wrong data (a grade of 150, a student without a name, a score for a student who doesn't exist)
 // never reaches the database. The rules match the app's forms.
-import { GRADUATED, TERMS } from "../../src/constants.js";
+import { ALL_TERMS, GRADUATED, termLabel, termsFor } from "../../src/constants.js";
 import { GRADES, gradeLabel, gradeOf, levelOf, offers, sectionLabel } from "../../src/levels.js";
 import { COMPONENTS } from "../../src/lib/gradeCalc.js";
 import { bad } from "./access.js";
 
+const programCodes = (ctx) => (ctx.settings.school.programs || []).map((p) => p.code);
 const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (s) => typeof s === "string" && DATE_RE.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00Z")) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
@@ -62,6 +63,7 @@ const RULES = {
     room: text("Room", 20),
     capacity: num("Capacity", 1, 200, { integer: true }),
     strand: text("Strand", 20, { oneOf: (ctx) => ["", ...(ctx.settings.school.strands || [])] }),
+    program: text("Program", 20, { oneOf: (ctx) => ["", ...programCodes(ctx)] }),
   },
   // A subject and the grade levels that take it (Senior High: optionally only some strands).
   subjects: {
@@ -72,6 +74,10 @@ const RULES = {
     // Any known grade: a subject keeps grades of levels that are switched off (only sections of on levels can use it).
     grades: req(list("Grade levels", { oneOf: GRADES.map((g) => g.key) })),
     strands: list("Strands", { oneOf: (ctx) => ctx.settings.school.strands || [] }),
+    // College only: units, the semester it's taught in, and (optionally) only some programs.
+    units: num("Units", 0, 12, { step: 0.5 }),
+    semester: num("Semester", 1, 2, { integer: true }),
+    programs: list("Programs", { oneOf: programCodes }),
   },
   notices: {
     title: req(text("Title", 150)),
@@ -90,7 +96,7 @@ const RULES = {
     studentId: req(text("Student", 40, { ref: "student" })),
     class: req(text("Section", 40, { ref: "section" })),
     subject: SUBJECT(),
-    term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
+    term: req(text("Grading period", 4, { oneOf: ALL_TERMS.map((t) => t.key) })),
     score: req(num("Grade", 0, 100)),
     published: req({ label: "Published", type: "boolean" }),
     updatedBy: text("Updated by", 40), updatedAt: date("Updated on"), year: req(text("School year", 9)),
@@ -98,7 +104,7 @@ const RULES = {
   activities: {
     class: req(text("Section", 40, { ref: "section" })),
     subject: SUBJECT(),
-    term: req(text("Quarter", 4, { oneOf: TERMS.map((t) => t.key) })),
+    term: req(text("Grading period", 4, { oneOf: ALL_TERMS.map((t) => t.key) })),
     year: req(text("School year", 9)),
     component: req(text("Component", 4, { oneOf: COMPONENTS.map((c) => c.key) })),
     title: req(text("Title", 60)),
@@ -150,6 +156,7 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
         if (typeof v !== "number" || !Number.isFinite(v)) fail("must be a number");
         if (r.integer && !Number.isInteger(v)) fail("must be a whole number");
         if (v < r.min || v > r.maxValue) fail(`must be between ${r.min} and ${r.maxValue}`);
+        if (r.step && !Number.isInteger(v / r.step)) fail(`must be in steps of ${r.step}`);
         break;
       case "list": {
         if (!Array.isArray(v) || v.length > 60 || v.some((x) => typeof x !== "string")) fail("must be a list");
@@ -179,12 +186,25 @@ export function checkRecord(col, incoming, merged, ctx, refs = newRefs()) {
     const g = gradeOf(merged.grade);
     if (!g || g.level !== merged.level) bad(`${merged.grade} isn't a grade level in ${levelOf(merged.level)?.label || merged.level}.`);
     if (merged.strand && !levelOf(merged.level)?.strands) bad("Only Senior High sections have a strand.");
+    if (merged.level === "college" && !merged.program) bad("A College section needs a program.");
+    if (merged.program && merged.level !== "college") bad("Only College sections have a program.");
+    const prog = (ctx.settings.school.programs || []).find((p) => p.code === merged.program);
+    if (prog && Number(merged.grade.slice(1)) > prog.years) bad(`${prog.code} is a ${prog.years}-year program, so it has no ${gradeLabel(merged.grade)}.`);
   }
-  if (col === "subjects" && merged.strands?.length && !merged.grades.some((g) => levelOf(gradeOf(g)?.level)?.strands)) bad("Only Senior High subjects can be limited to some strands.");
+  if (col === "subjects") {
+    if (merged.strands?.length && !merged.grades.some((g) => levelOf(gradeOf(g)?.level)?.strands)) bad("Only Senior High subjects can be limited to some strands.");
+    const college = merged.grades.filter((g) => gradeOf(g)?.level === "college").length;
+    if (college && college !== merged.grades.length) bad("A College subject can't also be a K–12 subject. Add it as a separate subject.");
+    if (college && (merged.units === undefined || merged.units === null || !merged.semester)) bad("A College subject needs its units and semester.");
+    if (!college && (merged.programs?.length || merged.semester || merged.units)) bad("Only College subjects have units, a semester and programs.");
+  }
   // Teaching, grades and activities: the section must take the subject (its grade level, and strand in Senior High).
   if (["assignments", "grades", "activities"].includes(col) && ctx.sections.has(merged.class) && ctx.subjectByName.has(merged.subject)) {
     const sec = ctx.sections.get(merged.class);
-    if (!offers(ctx.subjectByName.get(merged.subject), sec)) bad(`${sectionLabel(sec)} doesn't take ${merged.subject}. Add ${gradeLabel(sec.grade)}${sec.strand ? ` (${sec.strand})` : ""} to the subject on the Subjects page first.`);
+    const subject = ctx.subjectByName.get(merged.subject);
+    if (!offers(subject, sec)) bad(`${sectionLabel(sec)} doesn't take ${merged.subject}. Add ${gradeLabel(sec.grade)}${sec.strand ? ` (${sec.strand})` : ""}${sec.program ? ` (${sec.program})` : ""} to the subject on the Subjects page first.`);
+    // Quarters for K–12; the subject's semester's Prelim / Midterm / Finals for College.
+    if (merged.term && !termsFor(sec.level, subject).some((t) => t.key === merged.term)) bad(`${merged.subject} in ${sectionLabel(sec)} has no "${termLabel(merged.term)}" grading period.`);
   }
   return refs;
 }
@@ -212,7 +232,7 @@ export async function checkRefs(db, refs, ctx) {
 }
 
 // ---------- School settings ----------
-const SCHOOL_KEYS = ["name", "motto", "address", "phone", "email", "website", "academicYear", "pastYears", "passingMark", "grading", "weights", "transmutation", "strands"];
+const SCHOOL_KEYS = ["name", "motto", "address", "phone", "email", "website", "academicYear", "pastYears", "passingMark", "grading", "weights", "transmutation", "strands", "programs", "collegeScale", "periods"];
 
 /** Checks the whole school profile as it will be saved (School Setup). */
 export function checkSchool(patch, school, ctx) {
@@ -249,4 +269,20 @@ export function checkSchool(patch, school, ctx) {
   if (typeof s.transmutation !== "boolean") bad("The DepEd transmutation setting must be on or off.");
   if (!Array.isArray(s.strands) || s.strands.length > 30 || s.strands.some((x) => typeof x !== "string" || !x.trim() || x.length > 20)) bad("Strands must be a list of short names.");
   if (new Set(s.strands.map((x) => x.toUpperCase())).size !== s.strands.length) bad("Each strand can only be listed once.");
+  if (!Array.isArray(s.periods) || !s.periods.length || s.periods.length > 12 || s.periods.some((t, i) => typeof t !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t) || (i && t <= s.periods[i - 1]))) bad("Timetable periods must be start times like 08:00, in order.");
+  // College programs and grade scale
+  if (!Array.isArray(s.programs) || s.programs.length > 60) bad("Programs must be a list.");
+  for (const p of s.programs) {
+    if (!isObj(p) || typeof p.code !== "string" || !/^[A-Za-z0-9-]{2,20}$/.test(p.code)) bad("Each program needs a short code (letters, digits or -), e.g. BSIT.");
+    if (typeof p.name !== "string" || !p.name.trim() || p.name.length > 100) bad(`Program ${p.code} needs a name of up to 100 characters.`);
+    if (!Number.isInteger(p.years) || p.years < 1 || p.years > 5) bad(`Program ${p.code} must last 1 to 5 years.`);
+  }
+  if (new Set(s.programs.map((p) => p.code.toUpperCase())).size !== s.programs.length) bad("Each program code can only be listed once.");
+  const sc = s.collegeScale;
+  if (!Array.isArray(sc) || sc.length < 2 || sc.length > 20) bad("The College grade scale needs 2 to 20 rows.");
+  for (const g of sc) {
+    if (!isObj(g) || !/^\d\.\d{2}$/.test(g.grade) || Number(g.grade) < 1 || Number(g.grade) > 5) bad("Each College grade must look like 1.00 to 5.00.");
+    if (typeof g.min !== "number" || g.min < 0 || g.min > 100) bad(`College grade ${g.grade}: the minimum must be from 0 to 100.`);
+  }
+  if (new Set(sc.map((g) => g.min)).size !== sc.length || !sc.some((g) => g.min === 0)) bad("College grade scale: each row needs its own minimum, and the lowest must start at 0%.");
 }

@@ -15,6 +15,7 @@ import { DEFAULT_PERMISSIONS } from "../src/lib/permissions.js";
 import { allow, readJson, sameOriginJson, send } from "./_lib/http.js";
 
 const MAX_BATCH = 2000;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const GRADUATED = "Graduated"; // class given to students who finish the top class
 const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o?.[k] !== undefined).map((k) => [k, o[k]]));
@@ -178,6 +179,16 @@ async function mutate(user, body) {
       const academicYear = { ...school.academicYear, ...pick(y, ["label", "start", "end"]), key: school.academicYear.key };
       const next = { ...school, ...patch, academicYear, pastYears: school.pastYears || [] };
       checkSchool(patch, next, ctx);
+      // A College program in use can't be removed, or shortened below a year level that has sections.
+      for (const s of [...ctx.sections.values()].filter((x) => x.program && x.year === school.academicYear.key)) {
+        const p = next.programs.find((x) => x.code === s.program);
+        if (!p) bad(`Program ${s.program} still has sections this year (${sectionLabel(s)}), so it can't be removed.`);
+        if (Number(s.grade.slice(1)) > p.years) bad(`${p.code} has a ${s.grade.replace("Y", "year ")} section (${sectionLabel(s)}), so it can't be shorter than that.`);
+      }
+      const usedBy = ctx.subjects.find((x) => (x.programs || []).some((c) => !next.programs.some((p) => p.code === c)));
+      if (usedBy) bad(`${usedBy.name} is limited to a program you removed. Change the subject first.`);
+      const usedStrand = ctx.subjects.find((x) => (x.strands || []).some((c) => !next.strands.includes(c)));
+      if (usedStrand) bad(`${usedStrand.name} is limited to a strand you removed. Change the subject first.`);
       await db.collection("settings").updateOne({ _id: "school" }, { $set: { value: next } }, { upsert: true });
       return {};
     }
@@ -261,6 +272,16 @@ async function mutate(user, body) {
       return {};
     }
 
+    case "periods": {
+      // Start times of the timetable periods, shared by every section ("08:00" … in order).
+      needEdit("routine");
+      const p = body.periods;
+      if (!Array.isArray(p) || p.length !== DATA.PERIODS.length || p.some((t) => typeof t !== "string" || !TIME_RE.test(t))) bad(`Give ${DATA.PERIODS.length} start times like 08:00.`);
+      if (p.some((t, i) => i && t <= p[i - 1])) bad("Each period must start after the one before it.");
+      await db.collection("settings").updateOne({ _id: "school" }, { $set: { "value.periods": p } });
+      return {};
+    }
+
     case "permission": {
       needEdit("roles");
       const { module, role, level } = body;
@@ -318,11 +339,12 @@ async function mutate(user, body) {
   }
 }
 
-/** A new or edited section: this school year's, and its name unique within its grade. */
+/** A new or edited section: this school year's, and its name unique within its grade (and College program). */
 async function checkSection(db, ctx, id, sec) {
   if (sec.year !== ctx.settings.school.academicYear.key) bad("Sections are created for the current school year.");
-  const twin = await db.collection("classes").findOne({ _id: { $ne: id }, year: sec.year, grade: sec.grade, name: sec.name });
-  if (twin) bad(`There's already a section called "${sec.name}" in that grade this year.`);
+  // College: unique within the program and year level (BSIT 1st Year – A and BSBA 1st Year – A can both exist).
+  const twin = await db.collection("classes").findOne({ _id: { $ne: id }, year: sec.year, grade: sec.grade, name: sec.name, ...(sec.program ? { program: sec.program } : { program: { $in: [null, ""] } }) });
+  if (twin) bad(`There's already a section called "${sec.name}" in ${sec.program ? sec.program + " " : ""}that grade this year.`);
 }
 
 /** Where a subject (by name) is still used, e.g. "3 grades", or null. Grades, activities, assignments and teachers refer to it by name. */

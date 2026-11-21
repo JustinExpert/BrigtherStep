@@ -4,7 +4,7 @@
 // keeps the history and a past year still knows who was in which section.
 import crypto from "node:crypto";
 import { GRADUATED } from "../../src/constants.js";
-import { bySchoolOrder, gradeOf, nextGrade } from "../../src/levels.js";
+import { bySchoolOrder, gradeOf, nextCollegeYear, nextGrade } from "../../src/levels.js";
 import { bad, deny, HttpError } from "./access.js";
 import { getClient } from "./db.js";
 
@@ -64,14 +64,19 @@ export async function rollSections(db, ctx, { cur, next, promote, by }, session)
     copy.set(s._id, n);
     created.push(n);
   }
-  // Where a student moving up lands: same section name in the next grade if there is one, else that grade's first section.
-  const findIn = (grade, name) => created.filter((s) => s.grade === grade).sort(bySchoolOrder).find((s) => s.name === name)
-    || created.filter((s) => s.grade === grade).sort(bySchoolOrder)[0];
+  // Where a student moving up lands: a section of the next grade in the same College program (and, within
+  // Senior High, the same strand): the one with the same name if there is one, else the first.
+  const findIn = (grade, like) => {
+    const sameLevel = gradeOf(grade).level === like.level;
+    const pool = created.filter((s) => s.grade === grade && (s.program || "") === (like.program || "") && (!sameLevel || (s.strand || "") === (like.strand || ""))).sort(bySchoolOrder);
+    return pool.find((s) => s.name === like.name) || pool[0];
+  };
   const ensure = (grade, like) => { // a grade with no section yet gets one, named like the student's old section
-    const found = findIn(grade, like.name);
+    const found = findIn(grade, like);
     if (found) return found;
     const level = gradeOf(grade).level; // e.g. Grade 7 is Junior High, even when moving up from Elementary
-    const n = { _id: newId("CLS-"), year: next.key, level, grade, name: like.name, adviser: "", room: "", capacity: like.capacity || 40, strand: "" };
+    const n = { _id: newId("CLS-"), year: next.key, level, grade, name: like.name, adviser: "", room: "", capacity: like.capacity || 40,
+      strand: level === like.level ? like.strand || "" : "", ...(like.program ? { program: like.program } : {}) };
     created.push(n);
     return n;
   };
@@ -83,7 +88,9 @@ export async function rollSections(db, ctx, { cur, next, promote, by }, session)
     const old = ctx.sections.get(st.class);
     let target = null;
     if (promote) {
-      const ng = nextGrade(old.grade, ctx.levels);
+      // College moves up within the student's program (BSIT 1st Year → 2nd Year … graduate after its last year).
+      const program = (ctx.settings.school.programs || []).find((p) => p.code === old.program);
+      const ng = old.level === "college" ? nextCollegeYear(old.grade, program?.years) : nextGrade(old.grade, ctx.levels);
       if (ng) { target = ensure(ng, old); promoted++; } else graduated++;
     } else { target = copy.get(old._id); stayed++; }
     studentOps.push({ updateOne: { filter: { _id: st._id }, update: target ? { $set: { class: target._id } } : { $set: { class: GRADUATED, graduatedYear: cur.key } } } });

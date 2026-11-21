@@ -9,7 +9,7 @@ import DateInput from "./DateInput.jsx";
  */
 const optValue = (o) => (typeof o === "object" ? o.value : o);
 export default function RecordForm({ fields, initial = {}, submitLabel = "Save", onSubmit, onCancel }) {
-  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, f.type === "checks" ? (initial[f.key] || []).filter((x) => f.options.some((o) => optValue(o) === x)) : initial[f.key] ?? (f.type === "select" ? optValue(f.options[0]) : "")])));
+  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.key, f.type === "checks" ? (initial[f.key] || []).filter((x) => f.options.some((o) => optValue(o) === x)) : (f.type === "select" && typeof initial[f.key] === "number" ? String(initial[f.key]) : initial[f.key]) ?? (f.type === "select" ? optValue(f.options[0]) : "")])));
   const [error, setError] = useState("");
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
 

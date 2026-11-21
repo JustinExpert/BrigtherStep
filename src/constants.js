@@ -13,6 +13,26 @@ export const TERMS = [
   { key: "Q3", label: "3rd Quarter" }, { key: "Q4", label: "4th Quarter" },
 ];
 
+/** College grading periods: Prelim, Midterm and Finals in each semester. A college subject belongs to one semester. */
+export const SEMESTERS = [{ key: 1, label: "1st Semester" }, { key: 2, label: "2nd Semester" }];
+export const COLLEGE_TERMS = SEMESTERS.flatMap((s) => [["P", "Prelim"], ["M", "Midterm"], ["F", "Finals"]]
+  .map(([k, short]) => ({ key: `${s.key}${k}`, short, label: `${s.label} · ${short}`, sem: s.key })));
+export const ALL_TERMS = [...TERMS, ...COLLEGE_TERMS];
+/** The grading periods of a subject in a level: quarters for K–12; the subject's semester's periods for College. */
+export const termsFor = (level, subject) => (level === "college" ? COLLEGE_TERMS.filter((t) => !subject?.semester || t.sem === Number(subject.semester)) : TERMS);
+export const termLabel = (key) => ALL_TERMS.find((t) => t.key === key)?.label || key;
+
+/** College grade scale: percentage → 1.00 (best) … 3.00 (passing) … 5.00 (failed). Editable per school. */
+export const COLLEGE_SCALE = [
+  { grade: "1.00", min: 97 }, { grade: "1.25", min: 94 }, { grade: "1.50", min: 91 }, { grade: "1.75", min: 88 }, { grade: "2.00", min: 85 },
+  { grade: "2.25", min: 82 }, { grade: "2.50", min: 79 }, { grade: "2.75", min: 76 }, { grade: "3.00", min: 75 }, { grade: "5.00", min: 0 },
+];
+export const PROGRAMS = [
+  { code: "BSIT", name: "BS Information Technology", years: 4 },
+  { code: "BSBA", name: "BS Business Administration", years: 4 },
+  { code: "BEED", name: "Bachelor of Elementary Education", years: 4 },
+];
+
 /** A grade's id: one per school year, student, subject and quarter, so years never overwrite each other. */
 export const gradeId = (year, studentId, subject, term) => `${year}|${studentId}|${subject}|${term}`;
 
@@ -37,6 +57,9 @@ export const DEFAULT_SCHOOL = {
   weights: structuredClone(DEFAULT_WEIGHTS), // grade component weights (%) per subject
   transmutation: false, // apply the DepEd transmutation table to quarterly grades
   strands: [...STRANDS],
+  periods: [...PERIODS], // start time of each timetable period (same for every section)
+  programs: structuredClone(PROGRAMS), // College programs: { code, name, years }
+  collegeScale: structuredClone(COLLEGE_SCALE),
   grading: [
     { grade: "A", min: 90, remark: "Outstanding" },
     { grade: "B", min: 80, remark: "Very good" },

@@ -1,7 +1,7 @@
 // Read-only health check of the BrighterStep database: cross-checks every collection against
 // the others (links, ids, school years, value ranges). Changes nothing.
 // Run: npm run db:audit
-import { GRADUATED, TERMS } from "../src/constants.js";
+import { ALL_TERMS as TERMS, GRADUATED } from "../src/constants.js";
 import { GRADES, gradeOf, levelOf, offers, parseEnabledLevels } from "../src/levels.js";
 import { LEVELS, MODULES, ROLES } from "../src/lib/permissions.js";
 import { connect, dbName, redact, uri } from "./db.mjs";
@@ -81,8 +81,9 @@ try {
     if (gradeOf(s.grade)?.level !== s.level) problem("sections", "grade doesn't belong to its level", `${s._id}: ${s.grade}`);
     if (!s.name) problem("sections", "missing name", s._id);
     if (s.adviser && !teacherIds.has(s.adviser)) problem("sections", "adviser doesn't exist", `${s._id} → ${s.adviser}`);
-    const k = `${s.year}|${s.grade}|${s.name}`;
-    if (seen.has(k)) problem("sections", "two sections with the same name in a grade", k);
+    if ((s.level === "college") !== !!s.program) problem("sections", "College sections need a program (and only they have one)", s._id);
+    const k = `${s.year}|${s.program || ""}|${s.grade}|${s.name}`; // College: per program
+    if (seen.has(k)) problem("sections", "two sections with the same name in a grade (and program)", k);
     seen.add(k);
   }
   for (const cls of Object.keys(routine || {})) if (!currentClass(cls)) problem("settings", "timetable for a section that isn't this year's", cls);

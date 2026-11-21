@@ -9,7 +9,7 @@ import { useSections } from "../lib/sections.js";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
-  const { students, teachers, assignments, routine } = useData();
+  const { students, teachers, assignments, routine, school } = useData();
   const notices = useVisibleNotices();
   const scope = useScope();
   // Draft grades and low-attendance students are counted by the database for this teacher's classes.
@@ -66,7 +66,7 @@ export default function TeacherDashboard() {
               <thead><tr><th className="no-sort">Time</th><th className="no-sort">Class</th><th className="no-sort">Subject</th></tr></thead>
               <tbody>
                 {today.map((s, i) => (
-                  <tr key={i}><td>{DATA.PERIODS[i]}</td><td>{s ? <b>Class {s.class}</b> : <span className="muted">Free</span>}</td><td>{s?.subject || "—"}</td></tr>
+                  <tr key={i}><td>{(school.periods || DATA.PERIODS)[i]}</td><td>{s ? <b>Class {s.class}</b> : <span className="muted">Free</span>}</td><td>{s?.subject || "—"}</td></tr>
                 ))}
               </tbody>
             </table>

@@ -668,3 +668,6 @@ a.year-chip:hover { background: #e9dcfb; }
 .form .check-group label.check-row { display: inline-flex; align-items: center; gap: 8px; flex: none; white-space: nowrap; font-size: 14px; color: inherit; cursor: pointer; }
 .form .check-group label.check-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
 .check-group .hint { display: block; margin-top: 8px; }
+
+/* Period start time picker in the timetable's Time column (edit mode) */
+.timetable .ss-trigger.time-select { min-width: 96px; font-weight: 700; }

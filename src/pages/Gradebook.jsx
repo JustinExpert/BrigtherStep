@@ -5,7 +5,7 @@ import { useUI } from "../lib/UIContext.jsx";
 import { usePermission } from "../lib/usePermission.js";
 import { termLabel, useScope } from "../lib/scope.js";
 import { COMPONENTS, computeGrade, reportGrade, transmute, validScore, weightsFor } from "../lib/gradeCalc.js";
-import { TERMS, gradeId } from "../constants.js";
+import { gradeId, termsFor } from "../constants.js";
 import { todayIso } from "../lib/utils.js";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Badge, PageHead, StatTile } from "../components/ui.jsx";
@@ -13,6 +13,7 @@ import { gradeFor } from "./SchoolSetup.jsx";
 import Select from "../components/Select.jsx";
 import DateInput from "../components/DateInput.jsx";
 import { useSections } from "../lib/sections.js";
+
 import { useLevel } from "../lib/level.jsx";
 
 const ORDER = Object.fromEntries(COMPONENTS.map((c, i) => [c.key, i]));
@@ -64,9 +65,13 @@ export default function Gradebook() {
   const order = (id) => sections.current.findIndex((c) => c.id === id);
   const options = useMemo(() => scope.assignments.filter((a) => inLevel(a.class)).sort((a, b) => order(a.class) - order(b.class) || a.subject.localeCompare(b.subject)), [scope.assignments, inLevel, sections]); // eslint-disable-line react-hooks/exhaustive-deps
   const [pick, setPick] = useState(() => options[0]?.id || "");
-  const [term, setTerm] = useState("Q2");
+  const [termPick, setTerm] = useState("Q2");
+  const { subjects } = useData();
   const [edits, setEdits] = useState({}); // { activityId: { studentId: "typed value" } }
   const current = options.find((a) => a.id === pick) || options[0];
+  // Grading periods of this class + subject: quarters (K–12) or its semester's Prelim / Midterm / Finals (College).
+  const TERMS = current ? termsFor(sections.levelOf(current.class), subjects.find((x) => x.name === current.subject)) : [];
+  const term = TERMS.some((t) => t.key === termPick) ? termPick : TERMS[0]?.key;
   const key = current ? `${current.id}|${term}` : "";
   useEffect(() => setEdits({}), [key]);
   // This class + subject's activities and grades (every quarter) load from the server when it's opened.

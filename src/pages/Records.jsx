@@ -1,5 +1,5 @@
 // Simple list pages built on the generic CrudPage.
-import { AVATAR_COLORS } from "../constants.js";
+import { AVATAR_COLORS, SEMESTERS } from "../constants.js";
 import { gradeLabel, gradeOf, levelOf } from "../levels.js";
 import { useSections, useSubjects } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
@@ -62,13 +62,14 @@ export function Classes() {
   const year = school.academicYear;
   const grades = info?.grades || [];
   const teacherName = (id) => teachers.find((t) => t.id === id)?.name || "—";
+  const programs = school.programs || [];
   return (
     <CrudPage
       collection="classes" module="classes" title="Sections" singular="Section" crumbs={["Sections"]}
       listTitle={`${info?.label || "All"} sections · School year ${year.label}`}
       subtitle="Each school year has its own sections. Students move between them with Transfer (on the student's page)."
       rowFilter={(r) => r.year === year.key && (!level || r.level === level)}
-      defaults={{ year: year.key, level: level || "", grade: grades[0]?.key, capacity: 40, adviser: "", strand: "" }}
+      defaults={{ year: year.key, level: level || "", grade: grades[0]?.key, capacity: 40, adviser: "", strand: "", ...(info?.programs ? { program: programs[0]?.code || "" } : {}) }}
       describe={(r) => sections.label(r.id)}
       filter={{ key: "grade", label: "All grades", options: grades.map((g) => ({ value: g.key, label: g.label })) }}
       fields={[
@@ -78,6 +79,7 @@ export function Classes() {
         { key: "room", label: "Room" },
         { key: "capacity", label: "Capacity", type: "number", min: 1 },
         ...(info?.strands ? [{ key: "strand", label: "Strand", type: "select", options: [{ value: "", label: "— None —" }, ...(school.strands || []).map((x) => ({ value: x, label: x }))] }] : []),
+        ...(info?.programs ? [{ key: "program", label: "Program", type: "select", required: true, options: programs.map((p) => ({ value: p.code, label: `${p.code} · ${p.name}` })) }] : []),
       ]}
       cols={[
         { key: "name", label: "Section", render: (r) => <b>{sections.label(r.id)}</b> },
@@ -105,17 +107,24 @@ export function Subjects() {
   const grades = info?.grades || [];
   const inLevel = (g) => gradeOf(g)?.level === level;
   const strandField = info?.strands ? [{ key: "strands", label: "Strands", type: "checks", options: school.strands || [], hint: "Leave all unticked for a core subject that every strand takes." }] : [];
+  // College subjects: units, the semester they're taught in, and optionally only some programs.
+  const collegeFields = info?.programs ? [
+    { key: "units", label: "Units", type: "number", min: 0, max: 12, required: true },
+    { key: "semester", label: "Semester", type: "select", options: SEMESTERS.map((x) => ({ value: String(x.key), label: x.label })) },
+    { key: "programs", label: "Programs", type: "checks", options: (school.programs || []).map((p) => ({ value: p.code, label: p.code })), hint: "Leave all unticked for a subject every program takes (e.g. general education)." },
+  ] : [];
   return (
     <CrudPage
       collection="subjects" module="subjects" title="Subjects" singular="Subject" crumbs={["Subjects"]}
       listTitle={`${info?.label || "All"} subjects`}
       rowFilter={(r) => subjects.ofLevel(level).some((x) => x.id === r.id)}
-      defaults={{ type: "Theory", teacher: "", grades: grades.map((g) => g.key), strands: [] }}
+      defaults={{ type: "Theory", teacher: "", grades: info?.programs ? [grades[0]?.key] : grades.map((g) => g.key), strands: [], ...(info?.programs ? { units: 3, semester: "1", programs: [] } : {}) }}
       prepare={(vals, row) => ({
         ...vals,
         // Keep the grade levels this subject has in other levels; only this level's ticks change.
         grades: [...(row?.grades || []).filter((g) => !inLevel(g)), ...vals.grades],
         ...(info?.strands ? {} : { strands: row?.strands || [] }),
+        ...(info?.programs ? { units: Number(vals.units), semester: Number(vals.semester) } : {}),
       })}
       filter={{ key: "type", label: "All types", options: ["Theory", "Practical"] }}
       fields={[
@@ -125,12 +134,18 @@ export function Subjects() {
         { key: "type", label: "Type", type: "select", options: ["Theory", "Practical"] },
         { key: "grades", label: `Grade levels (${info?.label || ""})`, type: "checks", required: true, options: grades.map((g) => ({ value: g.key, label: g.label })) },
         ...strandField,
+        ...collegeFields,
       ]}
       cols={[
         { key: "name", label: "Subject", render: (r) => <b>{r.name}</b> },
         { key: "code", label: "Code" },
         { key: "grades", label: "Grade levels", sortable: false, render: (r) => r.grades.filter(inLevel).map(gradeLabel).join(", ") },
         ...(info?.strands ? [{ key: "strands", label: "Strands", sortable: false, render: (r) => (r.strands?.length ? r.strands.map((x) => <Badge key={x} value={x} cls="b-purple" />) : <span className="muted">Core (all)</span>) }] : []),
+        ...(info?.programs ? [
+          { key: "units", label: "Units" },
+          { key: "semester", label: "Semester", render: (r) => SEMESTERS.find((x) => x.key === r.semester)?.label || "—" },
+          { key: "programs", label: "Programs", sortable: false, render: (r) => (r.programs?.length ? r.programs.map((x) => <Badge key={x} value={x} cls="b-purple" />) : <span className="muted">All</span>) },
+        ] : []),
         { key: "type", label: "Type", render: (r) => <Badge value={r.type} /> },
         { key: "teacher", label: "Coordinator", render: (r) => r.teacher || "—" },
       ]}

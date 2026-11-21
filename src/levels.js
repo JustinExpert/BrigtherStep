@@ -7,8 +7,9 @@ export const LEVELS = [
   { key: "elementary", label: "Elementary", grades: [1, 2, 3, 4, 5, 6].map((n) => [`G${n}`, `Grade ${n}`]) },
   { key: "junior_high", label: "Junior High", grades: [7, 8, 9, 10].map((n) => [`G${n}`, `Grade ${n}`]) },
   { key: "senior_high", label: "Senior High", grades: [["G11", "Grade 11"], ["G12", "Grade 12"]], strands: true },
-  // College has its own model (programs, units, semesters); it isn't available until that module exists.
-  { key: "college", label: "College", grades: [["Y1", "1st Year"], ["Y2", "2nd Year"], ["Y3", "3rd Year"], ["Y4", "4th Year"]], available: false },
+  // College: block sections per program and year level, subjects with units and a semester.
+  // Not offered to schools (vendor page) until its gradebook and report card are finished.
+  { key: "college", label: "College", grades: [["Y1", "1st Year"], ["Y2", "2nd Year"], ["Y3", "3rd Year"], ["Y4", "4th Year"], ["Y5", "5th Year"]], programs: true, available: false },
 ].map((l) => ({ ...l, available: l.available !== false, grades: l.grades.map(([key, label]) => ({ key, label, level: l.key })) }));
 
 export const LEVEL_KEYS = LEVELS.map((l) => l.key);
@@ -22,12 +23,12 @@ export const gradeOf = (key) => GRADES.find((g) => g.key === key);
 export const gradeLabel = (key) => gradeOf(key)?.label ?? key;
 
 /**
- * Reads the vendor's ENABLED_LEVELS setting ("kinder,elementary"). Unknown or not-yet-available
- * levels are ignored; empty or unset means every available level (the demo).
+ * Reads the vendor's level setting ("kinder,elementary"). Unknown levels are ignored; empty or unset
+ * means every available level (the demo). The vendor page only saves available levels.
  */
 export function parseEnabledLevels(text) {
   const wanted = String(text || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const ok = wanted.filter((k) => levelOf(k)?.available);
+  const ok = wanted.filter((k) => levelOf(k));
   return ok.length ? LEVEL_KEYS.filter((k) => ok.includes(k)) : DEFAULT_LEVELS;
 }
 
@@ -46,18 +47,26 @@ export function nextGrade(key, enabledLevels) {
   return b === a + 1 ? next.key : null;
 }
 
+/** College: the year level after `key` in a program of `years` years ("Y1" → "Y2"), or null when the student finishes. */
+export function nextCollegeYear(key, years) {
+  const n = Number(String(key).slice(1));
+  return n >= 1 && n < (Number(years) || 4) ? `Y${n + 1}` : null;
+}
+
 /** "Grade 1 – Sampaguita" for a section record (or a fallback for an id we don't know). */
-export const sectionLabel = (section, fallbackId) => (section ? `${gradeLabel(section.grade)} – ${section.name}` : fallbackId ? `Class ${fallbackId}` : "—");
+export const sectionLabel = (section, fallbackId) => (section ? `${section.program ? section.program + " " : ""}${gradeLabel(section.grade)} – ${section.name}` : fallbackId ? `Class ${fallbackId}` : "—");
 
 /** Sort sections by school order of their grade, then by name. */
 export const bySchoolOrder = (a, b) => GRADES.findIndex((g) => g.key === a.grade) - GRADES.findIndex((g) => g.key === b.grade) || String(a.name).localeCompare(String(b.name));
 
 /**
  * Whether a section takes a subject: the subject lists the section's grade level, and (Senior High)
- * it is either a core subject (no strands listed) or listed for the section's strand.
+ * it is either a core subject (no strands listed) or listed for the section's strand; likewise
+ * (College) for the section's program.
  */
 export const offers = (subject, section) => !!subject && !!section && (subject.grades || []).includes(section.grade)
-  && (!subject.strands?.length || subject.strands.includes(section.strand));
+  && (!subject.strands?.length || subject.strands.includes(section.strand))
+  && (!subject.programs?.length || subject.programs.includes(section.program));
 
 /** The levels a subject is taught in, e.g. ["elementary", "junior_high"]. */
 export const subjectLevels = (subject) => [...new Set((subject.grades || []).map((g) => gradeOf(g)?.level).filter(Boolean))];

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_SCHOOL } from "../constants.js";
+import { DATA, DEFAULT_SCHOOL } from "../constants.js";
 import { DEFAULT_PERMISSIONS } from "./permissions.js";
 import { api, notify } from "./api.js";
 
@@ -121,8 +121,15 @@ export function DataProvider({ children }) {
     },
     /** Sets one timetable slot; subject "" = free period. */
     setSlot: (cls, day, period, subject) => {
-      setState((s) => ({ ...s, routine: { ...s.routine, [cls]: s.routine[cls].map((d, di) => (di !== day ? d : d.map((x, pi) => (pi === period ? { subject } : x)))) } }));
+      // A section without a timetable yet starts with a free week.
+      const blank = () => DATA.DAYS.map(() => DATA.PERIODS.map(() => ({ subject: "" })));
+      setState((s) => ({ ...s, routine: { ...s.routine, [cls]: (s.routine[cls] || blank()).map((d, di) => (di !== day ? d : d.map((x, pi) => (pi === period ? { subject } : x)))) } }));
       send("data", { op: "slot", cls, day, period, subject });
+    },
+    /** Start times of the timetable periods (["08:00", …], same for every section). */
+    setPeriods: (periods) => {
+      setState((s) => ({ ...s, school: { ...s.school, periods } }));
+      send("data", { op: "periods", periods });
     },
     setPermission: (module, role, level) => {
       setState((s) => ({ ...s, permissions: { ...s.permissions, [module]: { ...s.permissions[module], [role]: level } } }));

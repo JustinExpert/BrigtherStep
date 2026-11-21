@@ -74,6 +74,11 @@ function validate(s) {
   if (!(s.passingMark >= 0 && s.passingMark <= 100)) errs.push("Passing mark must be between 0 and 100.");
   if (s.strands.some((x) => !x.trim())) errs.push("Strand names can't be empty.");
   if (new Set(s.strands.map((x) => x.trim().toUpperCase())).size !== s.strands.length) errs.push("Strand names must be unique.");
+  if (s.programs.some((p) => !/^[A-Za-z0-9-]{2,20}$/.test(p.code) || !p.name.trim())) errs.push("Each College program needs a code (e.g. BSIT) and a name.");
+  if (new Set(s.programs.map((p) => p.code.toUpperCase())).size !== s.programs.length) errs.push("College program codes must be unique.");
+  if (s.programs.some((p) => !(Number.isInteger(p.years) && p.years >= 1 && p.years <= 5))) errs.push("A College program lasts 1 to 5 years.");
+  if (s.collegeScale.some((r) => !/^\d\.\d{2}$/.test(r.grade) || !(r.min >= 0 && r.min <= 100))) errs.push("College grades must look like 1.00 to 5.00, each with a minimum from 0 to 100.");
+  if (new Set(s.collegeScale.map((r) => r.min)).size !== s.collegeScale.length || !s.collegeScale.some((r) => r.min === 0)) errs.push("College grade scale: each row needs its own minimum, and the lowest must start at 0%.");
   const g = s.grading;
   if (!g.length) errs.push("Add at least one grade.");
   if (g.some((r) => !r.grade.trim())) errs.push("Every grade needs a letter or name.");
@@ -99,6 +104,8 @@ export default function SchoolSetup() {
   const [s, setS] = useState(() => ({
     ...structuredClone(school),
     strands: [...(school.strands || [])],
+    programs: structuredClone(school.programs || []),
+    collegeScale: structuredClone(school.collegeScale || []),
     transmutation: !!school.transmutation,
     weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, { ...weightsFor(school, sub) }])),
   }));
@@ -131,6 +138,8 @@ export default function SchoolSetup() {
       grading: s.grading.map((g) => ({ grade: g.grade.trim(), min: Number(g.min), remark: g.remark.trim() })).sort((a, b) => b.min - a.min),
       weights: Object.fromEntries(SUBJECTS.map((sub) => [sub, Object.fromEntries(COMPONENTS.map((c) => [c.key, Number(wOf(sub)[c.key])]))])),
       strands: s.strands.map((x) => x.trim()),
+      programs: s.programs.map((p) => ({ code: p.code.trim().toUpperCase(), name: p.name.trim(), years: Number(p.years) })),
+      collegeScale: s.collegeScale.map((r) => ({ grade: Number(r.grade).toFixed(2), min: Number(r.min) })).sort((a, b) => b.min - a.min),
       transmutation: !!s.transmutation,
     };
     const errs = validate(clean);
@@ -207,6 +216,49 @@ export default function SchoolSetup() {
             </div>
           )}
         </div>
+
+        {levels.includes("college") && (
+          <div className="card">
+            <div className="card-head"><div><h3>College programs &amp; grade scale</h3><p>Each College section belongs to one program. Grades are converted from % to the 1.00–5.00 scale (3.00 passing, 5.00 failed).</p></div></div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th className="no-sort">Code</th><th className="no-sort">Program name</th><th className="no-sort">Years</th><th className="no-sort" /></tr></thead>
+                <tbody>
+                  {s.programs.map((p, i) => {
+                    const setP = (k, v) => setS({ ...s, programs: s.programs.map((x, j) => (j === i ? { ...x, [k]: v } : x)) });
+                    return (
+                      <tr key={i}>
+                        <td><input className="input" style={{ width: 110 }} maxLength={20} value={p.code} onChange={(e) => setP("code", e.target.value)} aria-label="Program code" /></td>
+                        <td><input className="input" style={{ width: "100%", minWidth: 200 }} maxLength={100} value={p.name} onChange={(e) => setP("name", e.target.value)} aria-label="Program name" /></td>
+                        <td><input className="input" style={{ width: 80 }} type="number" min="1" max="5" value={p.years} onChange={(e) => setP("years", Number(e.target.value))} aria-label="Years" /></td>
+                        <td>{canEdit && <button type="button" className="icon-btn danger" title="Remove program" onClick={() => setS({ ...s, programs: s.programs.filter((_, j) => j !== i) })}><Icon name="trash" /></button>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {canEdit && <button type="button" className="link" style={{ marginTop: 12 }} onClick={() => setS({ ...s, programs: [...s.programs, { code: "", name: "", years: 4 }] })}>+ Add program</button>}
+            <div className="table-wrap" style={{ marginTop: 18 }}>
+              <table>
+                <thead><tr><th className="no-sort">College grade</th><th className="no-sort">From (%)</th><th className="no-sort" /></tr></thead>
+                <tbody>
+                  {s.collegeScale.map((r, i) => {
+                    const setR = (k, v) => setS({ ...s, collegeScale: s.collegeScale.map((x, j) => (j === i ? { ...x, [k]: v } : x)) });
+                    return (
+                      <tr key={i}>
+                        <td><input className="input" style={{ width: 90 }} maxLength={4} value={r.grade} onChange={(e) => setR("grade", e.target.value)} aria-label="College grade" /></td>
+                        <td><input className="input" style={{ width: 100 }} type="number" min="0" max="100" value={r.min} onChange={(e) => setR("min", e.target.value === "" ? "" : Number(e.target.value))} aria-label="Minimum percent" /></td>
+                        <td>{canEdit && <button type="button" className="icon-btn danger" title="Remove row" disabled={s.collegeScale.length <= 2} onClick={() => setS({ ...s, collegeScale: s.collegeScale.filter((_, j) => j !== i) })}><Icon name="trash" /></button>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {canEdit && <button type="button" className="link" style={{ marginTop: 12 }} onClick={() => setS({ ...s, collegeScale: [...s.collegeScale, { grade: "", min: "" }] })}>+ Add grade</button>}
+          </div>
+        )}
 
         <div className="card">
           <div className="card-head">

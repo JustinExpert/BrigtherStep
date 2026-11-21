@@ -13,11 +13,22 @@ import { findClash, teacherFor, teacherWeek } from "../lib/scope.js";
 import Select from "../components/Select.jsx";
 
 const MINE = "mine";
+// Time picker choices: every 5 minutes from 06:00 to 20:55.
+const pad = (n) => String(n).padStart(2, "0");
+const TIMES = Array.from({ length: 15 * 12 }, (_, i) => `${pad(6 + Math.floor(i / 12))}:${pad((i % 12) * 5)}`);
 
 export default function Routine() {
   const { user } = useAuth();
-  const { students, assignments, teachers, classes, routine, setSlot } = useData();
+  const { students, assignments, teachers, classes, routine, setSlot, school, setPeriods } = useData();
+  const PERIODS = school.periods?.length === DATA.PERIODS.length ? school.periods : DATA.PERIODS; // start time of each period
   const { toast } = useUI();
+  /** Changes one period's start time (for every section); periods must stay in order. */
+  const changeTime = (pi, t) => {
+    const next = PERIODS.map((x, i) => (i === pi ? t : x));
+    if (next.some((x, i) => i && x <= next[i - 1])) return toast(`Period ${pi + 1} must start after ${PERIODS[pi - 1] || "00:00"} and before ${PERIODS[pi + 1] || "midnight"}.`);
+    setPeriods(next);
+    toast(`Period ${pi + 1} now starts at ${t} (all sections)`);
+  };
   const canEdit = usePermission()("routine", "edit");
   const isTeacher = user.role === "teacher";
   // Students open on their own class; parents on their (first) child's class; teachers on their own timetable.
@@ -42,12 +53,12 @@ export default function Routine() {
   const change = (di, pi, subject) => {
     const clash = findClash(routine, assignments, view, di, pi, subject);
     if (clash) {
-      toast(`${nameOf(clash.teacherId)} already teaches ${label(clash.class)} (${clash.subject}) on ${DATA.DAYS[di]} at ${DATA.PERIODS[pi]}.`);
+      toast(`${nameOf(clash.teacherId)} already teaches ${label(clash.class)} (${clash.subject}) on ${DATA.DAYS[di]} at ${PERIODS[pi]}.`);
       return;
     }
     setSlot(view, di, pi, subject);
     const who = subject ? teacherFor(assignments, teachers, view, subject) : "";
-    toast(subject ? `${DATA.DAYS[di]} ${DATA.PERIODS[pi]}: ${subject}${who === "—" ? " (no teacher assigned yet)" : ` · ${who}`}` : `${DATA.DAYS[di]} ${DATA.PERIODS[pi]}: free period`);
+    toast(subject ? `${DATA.DAYS[di]} ${PERIODS[pi]}: ${subject}${who === "—" ? " (no teacher assigned yet)" : ` · ${who}`}` : `${DATA.DAYS[di]} ${PERIODS[pi]}: free period`);
   };
 
   const slot = (di, pi) => {
@@ -64,7 +75,7 @@ export default function Routine() {
     const subject = routine[view]?.[di]?.[pi]?.subject || ""; // a new section starts with a free week
     if (editing) {
       return (
-        <Select className="slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${DATA.PERIODS[pi]} subject`} onChange={(v) => change(di, pi, v)}
+        <Select className="slot-select" value={subject} aria-label={`${DATA.DAYS[di]} ${PERIODS[pi]} subject`} onChange={(v) => change(di, pi, v)}
           options={[{ value: "", label: "Free period" }, ...subjects.forSection(view), ...(subject && !subjects.forSection(view).includes(subject) ? [subject] : [])]} />
       );
     }
@@ -86,7 +97,7 @@ export default function Routine() {
         <div className="card-head">
           <div>
             <h3>{week ? `My Timetable · ${periodsTaught} periods a week` : `Weekly Timetable · ${view ? label(view) : "No section"} · Room ${roomOf(view)}`}</h3>
-            {editing && <p>Pick a subject for each period. The teacher comes from Teaching Assignments; a teacher can't be in two classes at once.</p>}
+            {editing && <p>Pick a subject for each period, and change a period's start time in the Time column (it applies to every section). The teacher comes from Teaching Assignments; a teacher can't be in two classes at once.</p>}
             {week && clashes > 0 && <p className="text-red">{clashes} period(s) clash. Ask the admin to change the timetable or the assignment.</p>}
           </div>
           <div className="tabs" role="tablist">
@@ -103,9 +114,12 @@ export default function Routine() {
               <tr><th className="no-sort">Time</th>{DATA.DAYS.map((d) => <th key={d} className="no-sort">{d}</th>)}</tr>
             </thead>
             <tbody>
-              {DATA.PERIODS.map((t, pi) => (
-                <tr key={t}>
-                  <td><b>{t}</b></td>
+              {PERIODS.map((t, pi) => (
+                <tr key={pi}>
+                  <td>{editing
+                    ? <Select className="time-select" value={t} searchable aria-label={`Period ${pi + 1} start time`} onChange={(v) => changeTime(pi, v)}
+                        options={(TIMES.includes(t) ? TIMES : [t, ...TIMES]).map((x) => ({ value: x, label: x }))} />
+                    : <b>{t}</b>}</td>
                   {DATA.DAYS.map((d, di) => <td key={d}>{slot(di, pi)}</td>)}
                 </tr>
               ))}

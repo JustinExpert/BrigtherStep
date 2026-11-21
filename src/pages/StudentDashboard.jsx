@@ -83,7 +83,7 @@ export function StudentOverview({ me, parentView = false }) {
             <table>
               <thead><tr><th className="no-sort">Time</th><th className="no-sort">Subject</th><th className="no-sort">Teacher</th></tr></thead>
               <tbody>
-                {today.map((s, i) => <tr key={i}><td>{DATA.PERIODS[i]}</td><td><b>{s.subject}</b></td><td>{teacherFor(assignments, teachers, me.class, s.subject)}</td></tr>)}
+                {today.map((s, i) => <tr key={i}><td>{(school.periods || DATA.PERIODS)[i]}</td><td><b>{s.subject}</b></td><td>{teacherFor(assignments, teachers, me.class, s.subject)}</td></tr>)}
               </tbody>
             </table>
           </div>

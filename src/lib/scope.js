@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { useData } from "./DataContext.jsx";
 import { ADMINS } from "./permissions.js";
-import { DATA, TERMS } from "../constants.js";
+import { DATA, TERMS, termLabel } from "../constants.js";
 import { bySchoolOrder } from "../levels.js";
 
 /**
@@ -88,7 +88,7 @@ export function findClash(routine, assignments, cls, day, period, subject) {
   return null;
 }
 
-export const termLabel = (key) => TERMS.find((t) => t.key === key)?.label || key;
+export { termLabel };
 
 /**
  * Report for one student from published grades:
