@@ -17,6 +17,7 @@ import { buildReport, useScope } from "../lib/scope.js";
 import { useSections } from "../lib/sections.js";
 import { useLevel } from "../lib/level.jsx";
 import { ReportCardView } from "./ReportCard.jsx";
+import { StudentLoginsCard } from "./StudentLogins.jsx";
 import { attendanceLog, attendanceRate } from "./StudentDashboard.jsx";
 import { pct } from "../lib/stats.js";
 
@@ -319,6 +320,7 @@ export function StudentDetails({ selfId }) {
           )}
         </div>
       </div>
+      {!selfId && <StudentLoginsCard student={s} />}
       {section?.level === "college" && section.year === school.academicYear.key && <SubjectLoad student={s} canEdit={canEdit} />}
       {view.loading ? <div className="card"><p className="hint" role="status">Loading grades and attendance…</p></div>
         : view.error ? <div className="alert error" role="alert">{view.error}</div>

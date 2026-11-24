@@ -86,7 +86,7 @@ export default function MyAccount() {
           <PhotoPicker name={user.name} photo={user.photo} color={ROLE_COLOR[user.role]}
             onChange={(photo) => { updateProfile({ photo }); toast(photo ? "Photo updated" : "Photo removed"); }} />
           <h2>{user.name}</h2>
-          <span style={{ color: "var(--muted)" }}>{user.email}</span>
+          <span style={{ color: "var(--muted)" }}>{user.email || `Signs in with ${user.studentId}`}</span>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <Badge value={ROLE_LABEL[user.role]} />
             {user.idNumber && <Badge value={`ID ${user.idNumber}`} cls="b-blue" />}
@@ -100,7 +100,7 @@ export default function MyAccount() {
               <div className="form-grid">
                 <label>Full name *<input className="input" required maxLength={80} value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
                 <label>Phone<input className="input" type="tel" maxLength={30} value={p.phone} onChange={(e) => setP({ ...p, phone: e.target.value })} /></label>
-                <label>Email<input className="input" value={user.email} disabled /></label>
+                <label>Email<input className="input" value={user.email || "None (sign in with your student ID)"} disabled /></label>
                 <label>ID number<input className="input" value={user.idNumber || "—"} disabled /></label>
               </div>
               <p className="hint">Email, role and ID number are managed by the school admin.</p>

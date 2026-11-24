@@ -1,4 +1,5 @@
 // POST /api/auth/login  { email, password, remember }  →  sets the session cookie
+// `email` may also be a student ID (students without an email sign in with it).
 import { attemptLogin, publicUser, startSession } from "../_lib/auth.js";
 import { safeReason } from "../_lib/db.js";
 import { allow, readJson, sameOriginJson, send } from "../_lib/http.js";

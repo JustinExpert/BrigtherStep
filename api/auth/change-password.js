@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   let body;
   try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { ok: false, error: "Invalid request." }); }
   try {
-    const user = await currentUser(req);
+    const user = await currentUser(req, { allowTemporary: true });
     if (!user) return send(res, 401, { ok: false, error: "Not signed in." });
     const { current, next } = body || {};
     if (typeof current !== "string" || current.length > 128 || !verifyPassword(current, user)) {

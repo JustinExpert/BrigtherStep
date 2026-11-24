@@ -68,27 +68,39 @@ export async function recordFailure(db, email) {
   return false;
 }
 
+/** Lockout key of an account, so wrong passwords count together however the person signs in. */
+export const lockKey = (user) => `user:${user._id}`;
+
+/** The account a sign-in name points to: an email, or (no "@") a student ID such as STU-43105. */
+async function findLogin(db, login) {
+  if (login.includes("@")) return db.collection("users").findOne({ email: login });
+  const id = login.toUpperCase();
+  const found = await db.collection("users").find({ role: "student", studentId: id }).limit(2).toArray();
+  return found.length === 1 ? found[0] : null; // two logins for one student: only their emails work
+}
+
 /**
- * Checks email + password. Returns { user } on success or { error, status } on failure.
- * Wrong email and wrong password give the same message; account status is only revealed
+ * Checks email (or student ID) + password. Returns { user } on success or { error, status } on failure.
+ * A wrong name and a wrong password give the same message; account status is only revealed
  * after the correct password (so it can't be used to probe accounts).
  */
-export async function attemptLogin(email, password) {
+export async function attemptLogin(login, password) {
   const db = await getDb();
   await ensureIndexes(db);
-  const e = normEmail(email);
+  const e = normEmail(login);
   if (!e || e.length > 254 || typeof password !== "string" || !password || password.length > 128) {
-    return { status: 400, error: "Enter your email and password." };
+    return { status: 400, error: "Enter your email or student ID, and your password." };
   }
-  const locked = await lockSecondsLeft(db, e);
+  const user = await findLogin(db, e);
+  const key = user ? lockKey(user) : e;
+  const locked = await lockSecondsLeft(db, key);
   if (locked) return { status: 429, error: `Too many attempts. Try again in ${Math.ceil(locked / 60)} minute(s).` };
 
-  const user = await db.collection("users").findOne({ email: e });
   if (!verifyPassword(password, user)) {
-    const nowLocked = await recordFailure(db, e);
-    return { status: 401, error: nowLocked ? `Too many attempts. Login locked for ${LOCK_MINUTES} minutes.` : "Incorrect email or password." };
+    const nowLocked = await recordFailure(db, key);
+    return { status: 401, error: nowLocked ? `Too many attempts. Login locked for ${LOCK_MINUTES} minutes.` : "Incorrect sign-in details or password." };
   }
-  await db.collection("login_attempts").deleteOne({ _id: e });
+  await db.collection("login_attempts").deleteOne({ _id: key });
   if (user.status === "pending") return { status: 403, error: "Your account is waiting for approval by the school admin." };
   if (user.status === "inactive") return { status: 403, error: "This account has been deactivated. Please contact the school admin." };
   return { user };
@@ -122,8 +134,12 @@ function sessionClaims(req) {
   return claims && typeof claims.sid === "string" && typeof claims.sub === "string" ? claims : null;
 }
 
-/** Returns the signed-in, active user for this request, or null. */
-export async function currentUser(req) {
+/**
+ * Returns the signed-in, active user for this request, or null.
+ * An account still on a temporary password (mustChangePassword) only counts as signed in where
+ * the caller allows it (who is signed in, change password), so it can't read or change data yet.
+ */
+export async function currentUser(req, { allowTemporary = false } = {}) {
   const claims = sessionClaims(req);
   if (!claims) return null;
   const db = await getDb();
@@ -133,7 +149,8 @@ export async function currentUser(req) {
     { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
   ]).toArray();
   const user = row?.user?.[0];
-  return user && user.status === "active" ? user : null; // deactivated accounts lose access at once
+  if (!user || user.status !== "active") return null; // deactivated accounts lose access at once
+  return user.mustChangePassword && !allowTemporary ? null : user;
 }
 
 export async function endSession(req) {
@@ -171,7 +188,7 @@ export function newSecret(password) {
 /** Stores a new password and signs out every other session of this user (all of them when req is null). */
 export async function setPassword(req, user, password) {
   const db = await getDb();
-  await db.collection("users").updateOne({ _id: user._id }, { $set: newSecret(password), $unset: { resetTokenHash: "", resetExpires: "" } });
+  await db.collection("users").updateOne({ _id: user._id }, { $set: newSecret(password), $unset: { resetTokenHash: "", resetExpires: "", mustChangePassword: "" } });
   const keep = req && sessionClaims(req)?.sid;
   await db.collection("sessions").deleteMany({ userId: user._id, ...(keep ? { _id: { $ne: keep } } : {}) });
 }

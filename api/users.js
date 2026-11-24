@@ -3,9 +3,14 @@
 //   update { id, patch }        (profile fields, role, status, links)
 //   delete { ids }
 //   resetLink { id }            → one-time reset token for the admin to pass on
-import { createResetToken, currentUser, endAllSessions, newSecret, passwordProblems, publicUser } from "./_lib/auth.js";
+//   tempPassword { id, password } → new temporary password; the person must change it at next sign-in
+//   studentLogins { studentId, student: { email? } | null, parent: { name, email } | { id } | null }
+//                               → the student's and/or a parent's login, with generated temporary passwords
+// Accounts made or reset here start on a temporary password (mustChangePassword): until the person
+// sets their own, they can only sign in to change it.
+import { createResetToken, currentUser, endAllSessions, lockKey, newSecret, passwordProblems, publicUser } from "./_lib/auth.js";
 import { HttpError, bad, context, deny } from "./_lib/access.js";
-import { email, emailFree, links, newUserId, photo, text } from "./_lib/accounts.js";
+import { accountEmail, email, emailFree, links, newUserId, photo, readablePassword, text } from "./_lib/accounts.js";
 import { postRoute } from "./_lib/route.js";
 import { ROLES } from "../src/lib/permissions.js";
 
@@ -31,15 +36,16 @@ export default postRoute(async (body, req) => {
       const role = checkRole(body.role);
       const name = text(body.name, 100, "Name");
       if (!name) bad("Enter a full name.");
-      const e = email(body.email);
-      await emailFree(db, e);
+      const linked = await links(db, role, body.links);
+      const e = accountEmail(body.email, role, linked.studentId);
+      if (e) await emailFree(db, e);
       const problems = passwordProblems(body.password);
       if (problems.length) bad(`Temporary password needs ${problems.join(", ")}.`);
       const doc = {
-        _id: newUserId(), name, email: e, role, status: "active",
+        _id: newUserId(), name, ...(e && { email: e }), role, status: "active",
         phone: text(body.phone, 40, "Phone"), idNumber: text(body.idNumber, 40, "ID number"), photo: photo(body.photo),
-        createdAt: new Date().toISOString().slice(0, 10), lastLogin: null,
-        ...(await links(db, role, body.links)), ...newSecret(body.password),
+        createdAt: new Date().toISOString().slice(0, 10), lastLogin: null, mustChangePassword: true,
+        ...linked, ...newSecret(body.password),
       };
       await users.insertOne(doc);
       return { user: publicUser(doc) };
@@ -49,9 +55,8 @@ export default postRoute(async (body, req) => {
       const target = await users.findOne({ _id: String(body.id || "") });
       mayManage(target);
       const p = body.patch && typeof body.patch === "object" ? body.patch : bad("Invalid change.");
-      const set = {};
+      const set = {}, unset = {};
       if ("name" in p) { set.name = text(p.name, 100, "Name"); if (!set.name) bad("Enter a full name."); }
-      if ("email" in p) { set.email = email(p.email); await emailFree(db, set.email, target._id); }
       if ("phone" in p) set.phone = text(p.phone, 40, "Phone");
       if ("idNumber" in p) set.idNumber = text(p.idNumber, 40, "ID number");
       if ("note" in p) set.note = text(p.note, 200, "Note");
@@ -64,11 +69,21 @@ export default postRoute(async (body, req) => {
           studentId: "studentId" in p ? p.studentId : target.studentId,
           teacherId: "teacherId" in p ? p.teacherId : target.teacherId,
           childIds: "childIds" in p ? p.childIds : target.childIds,
-        }));
+        }, target._id));
       }
-      if (Object.keys(set).length) await users.updateOne({ _id: target._id }, { $set: set });
+      // Email last: whether one is needed depends on the role and the student link.
+      const studentId = "studentId" in set ? set.studentId : target.studentId;
+      if ("email" in p || "role" in p || "studentId" in p) {
+        const e = accountEmail("email" in p ? p.email : target.email, role, studentId);
+        if (e && e !== target.email) { await emailFree(db, e, target._id); set.email = e; }
+        if (!e && target.email) unset.email = "";
+      }
+      const change = { ...(Object.keys(set).length && { $set: set }), ...(Object.keys(unset).length && { $unset: unset }) };
+      if (Object.keys(change).length) await users.updateOne({ _id: target._id }, change);
       if (set.status && set.status !== "active") await endAllSessions(target._id); // deactivated: signed out everywhere
-      return { user: publicUser({ ...target, ...set }) };
+      const after = { ...target, ...set };
+      if (unset.email) delete after.email;
+      return { user: publicUser(after) };
     }
 
     case "delete": {
@@ -86,6 +101,64 @@ export default postRoute(async (body, req) => {
       mayManage(target);
       if (target.status !== "active") return { token: null };
       return { token: await createResetToken(target) };
+    }
+
+    case "tempPassword": {
+      const target = await users.findOne({ _id: String(body.id || "") });
+      mayManage(target);
+      const problems = passwordProblems(body.password);
+      if (problems.length) bad(`Temporary password needs ${problems.join(", ")}.`);
+      await users.updateOne({ _id: target._id }, {
+        $set: { ...newSecret(body.password), mustChangePassword: true },
+        $unset: { resetTokenHash: "", resetExpires: "" },
+      });
+      await endAllSessions(target._id); // the old password's sessions end
+      await db.collection("login_attempts").deleteOne({ _id: lockKey(target) }); // and any lockout
+      return { user: publicUser({ ...target, mustChangePassword: true }) };
+    }
+
+    case "studentLogins": {
+      // At enrolment: the student's own login and/or a parent login, in one step.
+      // The server picks the temporary passwords and returns them once, for the printed slip.
+      const student = await db.collection("students").findOne({ _id: String(body.studentId || "") }, { projection: { name: 1 } });
+      if (!student) bad("That student record no longer exists.");
+      const stamp = { status: "active", phone: "", photo: null, createdAt: new Date().toISOString().slice(0, 10), lastLogin: null, mustChangePassword: true };
+      const out = {};
+      const inserts = [];
+
+      if (body.student) {
+        const linked = await links(db, "student", { studentId: student._id }); // refuses if they already have one
+        const e = accountEmail(body.student.email, "student", student._id);
+        if (e) await emailFree(db, e);
+        const password = readablePassword();
+        const doc = { _id: newUserId(), name: student.name, ...(e && { email: e }), role: "student", idNumber: student._id, ...stamp, ...linked, ...newSecret(password) };
+        inserts.push(doc);
+        out.student = { user: publicUser(doc), signIn: e || student._id, password };
+      }
+
+      let addChildTo = null;
+      if (body.parent?.id) { // an existing parent account (e.g. a sibling's) gets this child too
+        const parent = await users.findOne({ _id: String(body.parent.id) });
+        mayManage(parent);
+        if (parent.role !== "parent") bad("That account isn't a parent account.");
+        addChildTo = parent;
+        out.parent = { user: publicUser({ ...parent, childIds: [...new Set([...(parent.childIds || []), student._id])] }), signIn: parent.email, password: null };
+      } else if (body.parent) {
+        const name = text(body.parent.name, 100, "Parent's name");
+        if (!name) bad("Enter the parent's full name.");
+        const e = email(body.parent.email); // parents sign in with their email
+        if (inserts.some((d) => d.email === e)) bad("The student and the parent need different emails.");
+        await emailFree(db, e);
+        const password = readablePassword();
+        const doc = { _id: newUserId(), name, email: e, role: "parent", idNumber: "", ...stamp, studentId: null, teacherId: null, childIds: [student._id], ...newSecret(password) };
+        inserts.push(doc);
+        out.parent = { user: publicUser(doc), signIn: e, password };
+      }
+      if (!out.student && !out.parent) bad("Choose a student account, a parent account, or both.");
+
+      if (inserts.length) await users.insertMany(inserts);
+      if (addChildTo) await users.updateOne({ _id: addChildTo._id }, { $addToSet: { childIds: student._id } });
+      return out;
     }
 
     default:

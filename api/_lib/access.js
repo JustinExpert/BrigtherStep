@@ -258,7 +258,9 @@ export function ensureIndexes() {
     db.collection("students").createIndex({ class: 1, roll: 1 }), // section lists, year-end moves, section delete checks
     db.collection("attendance").createIndex({ year: 1, class: 1 }),
     db.collection("notices").createIndex({ year: 1, audience: 1 }),
-    db.collection("users").createIndex({ email: 1 }, { unique: true }),
+    // Sparse: student accounts may have no email (they sign in with their student ID).
+    db.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true }),
+    db.collection("users").createIndex({ studentId: 1 }, { sparse: true }),
     db.collection("users").createIndex({ resetTokenHash: 1 }, { sparse: true }),
     db.collection("sessions").createIndex({ userId: 1 }),
     db.collection("classes").createIndex({ year: 1, level: 1, grade: 1 }),

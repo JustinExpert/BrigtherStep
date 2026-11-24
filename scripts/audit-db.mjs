@@ -176,15 +176,25 @@ try {
   }
 
   // ---------- Accounts ----------
-  const emails = new Map();
+  const emails = new Map(), studentLogins = new Map();
   for (const u of users) {
     if (!ROLES.some((r) => r.key === u.role)) problem("users", "unknown role", `${u._id}: ${u.role}`);
     if (!["active", "pending", "inactive"].includes(u.status)) problem("users", "unknown status", `${u._id}: ${u.status}`);
     if (!u.salt || !u.passwordHash) problem("users", "no password set", u._id);
-    const e = String(u.email || "").toLowerCase();
-    if (emails.has(e)) problem("users", "duplicate email", `${u._id} & ${emails.get(e)}`);
-    emails.set(e, u._id);
-    if (u.email !== e) problem("users", "email not lowercase", u._id);
+    if (u.email === undefined) {
+      // Only a student linked to their record may have no email: they sign in with the student ID.
+      if (u.role !== "student" || !u.studentId) problem("users", "no email and no student ID to sign in with", u._id);
+    } else {
+      const e = String(u.email || "").toLowerCase();
+      if (!e) problem("users", "empty email (remove the field instead)", u._id);
+      if (emails.has(e)) problem("users", "duplicate email", `${u._id} & ${emails.get(e)}`);
+      emails.set(e, u._id);
+      if (u.email !== e) problem("users", "email not lowercase", u._id);
+    }
+    if (u.role === "student" && u.studentId) {
+      if (studentLogins.has(u.studentId)) problem("users", "student has two logins", `${u.studentId}: ${studentLogins.get(u.studentId)} & ${u._id}`);
+      studentLogins.set(u.studentId, u._id);
+    }
     if (u.role === "student" && u.studentId && !studentById.has(u.studentId)) problem("users", "linked student doesn't exist", `${u._id} → ${u.studentId}`);
     if (u.role === "teacher" && u.teacherId && !teacherIds.has(u.teacherId)) problem("users", "linked staff record doesn't exist", `${u._id} → ${u.teacherId}`);
     for (const id of u.childIds || []) if (!studentById.has(id)) problem("users", "linked child doesn't exist", `${u._id} → ${id}`);

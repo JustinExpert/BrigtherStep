@@ -18,7 +18,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let live = true;
-    api("auth/me").then((d) => { if (!live) return; setServerUser(d.user || null); if (d.user) load(); }, () => live && setServerUser(null));
+    // An account on a temporary password loads no school data until it sets its own password.
+    api("auth/me").then((d) => { if (!live) return; setServerUser(d.user || null); if (d.user && !d.user.mustChangePassword) load(); }, () => live && setServerUser(null));
     // A data request found the session gone (expired, signed out elsewhere, or deactivated).
     const ended = () => { setServerUser(null); clear(); };
     window.addEventListener("bs:signed-out", ended);
@@ -28,12 +29,13 @@ export function AuthProvider({ children }) {
   // The loaded copy of this account is kept up to date by in-app edits (e.g. a new photo).
   const local = serverUser ? users.find((u) => u.id === serverUser.id) : null;
   const user = useMemo(() => local || serverUser || null, [local, serverUser]);
-  const checking = serverUser === undefined || (!!serverUser && (status === "idle" || status === "loading"));
+  const checking = serverUser === undefined
+    || (!!serverUser && !serverUser.mustChangePassword && (status === "idle" || status === "loading"));
 
   const login = useCallback(async (email, password, remember) => {
     const { user: u } = await api("auth/login", { email, password, remember: !!remember });
     setServerUser(u);
-    await load();
+    if (!u.mustChangePassword) await load();
     return u;
   }, [load]);
 
@@ -68,7 +70,17 @@ export function AuthProvider({ children }) {
     if (problems.length) throw new Error(`New password needs ${problems.join(", ")}.`);
     if (current === next) throw new Error("Choose a password different from your current one.");
     await api("auth/change-password", { current, next });
-  }, []);
+    if (serverUser?.mustChangePassword) { // first sign-in done: now the school data can load
+      setServerUser({ ...serverUser, mustChangePassword: false });
+      await load();
+    }
+  }, [serverUser, load]);
+
+  /** Admin: give an account a new temporary password, to be changed at its next sign-in. */
+  const adminTempPassword = useCallback(async (id, password) => {
+    const { user: u } = await api("users", { op: "tempPassword", id, password });
+    putLocal("users", u);
+  }, [putLocal]);
 
   const updateProfile = useCallback((patch) => {
     if (!user) return;
@@ -78,8 +90,8 @@ export function AuthProvider({ children }) {
     api("auth/profile", clean).catch((e) => { notify(e.message); load(); });
   }, [user, putLocal, load]);
 
-  const value = useMemo(() => ({ user, checking, login, logout, register, createUser, requestReset, adminResetLink, resetPassword, changePassword, updateProfile }),
-    [user, checking, login, logout, register, createUser, requestReset, adminResetLink, resetPassword, changePassword, updateProfile]);
+  const value = useMemo(() => ({ user, checking, login, logout, register, createUser, requestReset, adminResetLink, adminTempPassword, resetPassword, changePassword, updateProfile }),
+    [user, checking, login, logout, register, createUser, requestReset, adminResetLink, adminTempPassword, resetPassword, changePassword, updateProfile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

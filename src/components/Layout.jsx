@@ -159,7 +159,7 @@ function TopBar({ onMenu }) {
           </button>
           {open === "user" && (
             <div className="dropdown" style={{ minWidth: 240 }}>
-              <div className="dd-item" style={{ cursor: "default" }}><span><b>{user.name}</b><small>{user.email}</small></span></div>
+              <div className="dd-item" style={{ cursor: "default" }}><span><b>{user.name}</b><small>{user.email || user.studentId}</small></span></div>
               <button className="dd-item" onClick={() => { setOpen(null); navigate("/my-account"); }}>
                 <Icon name="account" /><span>Account settings</span>
               </button>

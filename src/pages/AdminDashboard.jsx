@@ -46,7 +46,7 @@ export default function AdminDashboard() {
           <StatTile label="Students" value={compact(students.length)} icon="cap" tone="purple" />
           <StatTile label="Teachers" value={compact(teachers.length)} icon="teacher" tone="blue" />
           <StatTile label="Parents" value={compact(parents)} icon="parents" tone="orange" />
-          <StatTile label="Classes" value={classes.length} icon="class" tone="green" />
+          <StatTile label="Sections" value={classes.filter((c) => c.year === school.academicYear.key).length} icon="class" tone="green" />
         </div>
       </div>
 

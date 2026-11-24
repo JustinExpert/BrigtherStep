@@ -15,7 +15,8 @@
     "db:add-past-year": "node scripts/add-past-year.mjs",
     "db:migrate-sections": "node scripts/migrate-sections.mjs",
     "db:migrate-subjects": "node scripts/migrate-subjects.mjs",
-    "db:add-sample-levels": "node scripts/add-sample-levels.mjs"
+    "db:add-sample-levels": "node scripts/add-sample-levels.mjs",
+    "db:migrate-user-logins": "node scripts/migrate-user-logins.mjs"
   },
   "dependencies": {
     "mongodb": "^6.12.0",

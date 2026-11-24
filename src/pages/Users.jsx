@@ -14,6 +14,8 @@ import Select from "../components/Select.jsx";
 import { useSections } from "../lib/sections.js";
 
 const STATUS_CLS = { active: "b-green", pending: "b-amber", inactive: "b-red" };
+/** What the person types to sign in: their email, or a student's ID when the account has no email. */
+export const signInName = (u) => u.email || u.studentId || "—";
 const tempPassword = () => "Bs-" + randomToken().replace(/[-_]/g, "").slice(0, 6) + Math.floor(Math.random() * 90 + 10);
 
 /** Which roles the current user may assign/manage. */
@@ -27,7 +29,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
   const [f, setF] = useState(() => ({
     name: "", email: "", role: roles.includes("teacher") ? "teacher" : roles[0], phone: "", idNumber: "", photo: null,
     studentId: "", teacherId: "", childIds: [], password: tempPassword(),
-    ...initial, ...(initial && { childIds: initial.childIds || [], studentId: initial.studentId || "", teacherId: initial.teacherId || "" }),
+    ...initial, ...(initial && { email: initial.email || "", childIds: initial.childIds || [], studentId: initial.studentId || "", teacherId: initial.teacherId || "" }),
   }));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -39,8 +41,10 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
     setError("");
     const email = f.email.trim().toLowerCase();
     if (!f.name.trim()) return setError("Enter a full name.");
-    if (!EMAIL_RE.test(email)) return setError("Enter a valid email address.");
-    if (users.some((u) => u.email.toLowerCase() === email && u.id !== initial?.id)) return setError("Another account already uses this email.");
+    const noEmailOk = f.role === "student" && f.studentId; // signs in with the student ID
+    if (!email && !noEmailOk) return setError(f.role === "student" ? "Enter an email, or link the student record so they can sign in with its ID." : "Enter a valid email address.");
+    if (email && !EMAIL_RE.test(email)) return setError("Enter a valid email address.");
+    if (email && users.some((u) => u.email?.toLowerCase() === email && u.id !== initial?.id)) return setError("Another account already uses this email.");
     if (isNew) {
       const problems = passwordProblems(f.password);
       if (problems.length) return setError(`Temporary password needs ${problems.join(", ")}.`);
@@ -62,7 +66,9 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
       <PhotoPicker name={f.name} photo={f.photo} color={ROLE_COLOR[f.role]} onChange={(photo) => setF({ ...f, photo })} />
       <div className="form-grid">
         <label>Full name *<input className="input" required maxLength={80} value={f.name} onChange={set("name")} /></label>
-        <label>Email *<input className="input" type="email" required value={f.email} onChange={set("email")} placeholder="name@brighterstep.test" /></label>
+        <label>{f.role === "student" ? "Email (optional)" : "Email *"}
+          <input className="input" type="email" required={f.role !== "student"} value={f.email} onChange={set("email")} placeholder={f.role === "student" ? "None: signs in with student ID" : "name@school.edu"} />
+        </label>
         <label>Role<Select value={f.role} onChange={(v) => setF({ ...f, role: v })} aria-label="Role" options={roles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))} /></label>
         <label>ID number<input className="input" maxLength={20} value={f.idNumber} onChange={set("idNumber")} placeholder="e.g. TCH-203, STU-43105" /></label>
         <label>Phone<input className="input" type="tel" maxLength={30} value={f.phone} onChange={set("phone")} /></label>
@@ -99,7 +105,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
               <input className="input" required value={f.password} onChange={set("password")} style={{ flex: 1 }} />
               <button type="button" className="btn light sm" onClick={() => setF({ ...f, password: tempPassword() })}>Generate</button>
             </div>
-            <small className="hint">Share it with the user privately. They can change it in Account settings.</small>
+            <small className="hint">Give it to the person privately. They must choose their own password the first time they sign in.</small>
           </label>
         )}
       </div>
@@ -112,7 +118,7 @@ function UserForm({ initial, actorRole, onSave, onCancel }) {
 }
 
 export default function Users() {
-  const { user: me, createUser, adminResetLink } = useAuth();
+  const { user: me, createUser, adminResetLink, adminTempPassword } = useAuth();
   const { users, students, teachers, update, remove } = useData();
   const { openModal, closeModal, confirm, toast } = useUI();
   const can = usePermission();
@@ -135,7 +141,7 @@ export default function Users() {
       openModal("Account created", (
         <>
           <p style={{ marginTop: 0 }}>Share these sign-in details with <b>{data.name}</b> privately:</p>
-          <dl className="kv"><dt>Email</dt><dd>{data.email}</dd><dt>Temporary password</dt><dd><code>{password}</code></dd></dl>
+          <dl className="kv"><dt>Sign in with</dt><dd>{data.email || links.studentId}</dd><dt>Temporary password</dt><dd><code>{password}</code></dd></dl>
           <div className="form-actions"><button className="btn" onClick={closeModal}>Done</button></div>
         </>
       ));
@@ -163,12 +169,28 @@ export default function Users() {
     if (!token) return toast("Only active accounts can reset their password");
     openModal("Password reset link sent", (
       <>
-        <p style={{ marginTop: 0 }}>A reset link was emailed to <b>{u.email}</b>. It expires in 30 minutes.</p>
+        <p style={{ marginTop: 0 }}>Reset link for <b>{signInName(u)}</b>. It expires in 30 minutes.</p>
         <div className="demo-mail"><b>📬 Demo mailbox</b><p>There's no email server in this demo. The link the user would receive:</p>
           <code style={{ wordBreak: "break-all", fontSize: 12 }}>{location.origin}/reset-password/{token}</code></div>
         <div className="form-actions"><button className="btn" onClick={closeModal}>Done</button></div>
       </>
     ));
+  };
+
+  const setTemp = (u) => {
+    const password = tempPassword();
+    confirm("Give a new temporary password?",
+      `${u.name}'s current password stops working and they are signed out. They must choose a new password when they next sign in.`,
+      async () => {
+        try { await adminTempPassword(u.id, password); } catch (e) { return toast(e.message); }
+        openModal("New temporary password", (
+          <>
+            <p style={{ marginTop: 0 }}>Give these sign-in details to <b>{u.name}</b> privately:</p>
+            <dl className="kv"><dt>Sign in with</dt><dd>{signInName(u)}</dd><dt>Temporary password</dt><dd><code>{password}</code></dd></dl>
+            <div className="form-actions"><button className="btn" onClick={closeModal}>Done</button></div>
+          </>
+        ));
+      }, "Set password");
   };
 
   const del = (u) => confirm("Delete account?", `${u.name}'s login will be removed permanently. School records (e.g. the student file) are not deleted.`, () => {
@@ -198,7 +220,7 @@ export default function Users() {
                 <Avatar name={u.name} photo={u.photo} color={ROLE_COLOR[u.role]} />
                 <div style={{ minWidth: 0 }}>
                   <h5>{u.name} <Badge value={ROLE_LABEL[u.role]} cls="b-purple" /></h5>
-                  <p>{u.email}{u.idNumber && ` · claims ID ${u.idNumber}`}{linkText(u) !== "—" && ` · ${linkText(u)}`}</p>
+                  <p>{signInName(u)}{u.idNumber && ` · claims ID ${u.idNumber}`}{linkText(u) !== "—" && ` · ${linkText(u)}`}</p>
                 </div>
                 <div className="row-actions" style={{ marginLeft: "auto" }}>
                   {mayManage(u) ? (
@@ -222,16 +244,22 @@ export default function Users() {
         searchPlaceholder="Search name, email or ID"
         filter={{ key: "roleLabel", label: "All roles", options: ROLES.map((r) => r.label) }}
         cols={[
-          { key: "name", label: "User", render: (r) => <div className="who"><Avatar name={r.name} photo={r.photo} color={ROLE_COLOR[r.role]} /><div>{r.name}{r.id === me.id && " (you)"}<small>{r.email}</small></div></div> },
+          { key: "name", label: "User", render: (r) => <div className="who"><Avatar name={r.name} photo={r.photo} color={ROLE_COLOR[r.role]} /><div>{r.name}{r.id === me.id && " (you)"}<small>{signInName(r)}</small></div></div> },
           { key: "roleLabel", label: "Role", render: (r) => <Badge value={r.roleLabel} cls="b-purple" /> },
           { key: "idNumber", label: "ID No.", render: (r) => r.idNumber || "—" },
           { key: "link", label: "Linked to" },
-          { key: "status", label: "Status", render: (r) => <Badge value={r.status} cls={STATUS_CLS[r.status]} /> },
+          { key: "status", label: "Status", render: (r) => (
+            <>
+              <Badge value={r.status} cls={STATUS_CLS[r.status]} />
+              {r.mustChangePassword && r.status === "active" && <small className="hint" style={{ display: "block" }}>Temporary password</small>}
+            </>
+          ) },
           { key: "lastLogin", label: "Last login", render: (r) => (r.lastLogin ? relTime(r.lastLogin.slice(0, 10)) : "Never") },
           { key: "act", label: "Action", sortable: false, render: (r) => mayManage(r) ? (
             <div className="row-actions">
               <button className="icon-btn" title="Edit" onClick={() => edit(r)}><Icon name="edit" /></button>
               <button className="icon-btn" title="Send password reset link" onClick={() => sendReset(r)}><Icon name="mail" /></button>
+              {r.status === "active" && <button className="icon-btn" title="Give a new temporary password" onClick={() => setTemp(r)}><Icon name="lock" /></button>}
               <button className="icon-btn danger" title="Delete account" onClick={() => del(r)}><Icon name="trash" /></button>
               {r.status === "active"
                 ? <button className="btn sm light" onClick={() => setStatus(r, "inactive")}>Deactivate</button>

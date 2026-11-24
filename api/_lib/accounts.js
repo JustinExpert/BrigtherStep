@@ -1,4 +1,5 @@
 // Validation shared by self-registration, admin-created accounts and profile edits.
+import crypto from "node:crypto";
 import { EMAIL_RE, normEmail } from "./auth.js";
 import { bad } from "./access.js";
 
@@ -28,12 +29,18 @@ export async function emailFree(db, e, exceptId) {
   if (other) bad("An account with this email already exists.");
 }
 
-/** Checks role links (student record, staff record, children) exist and returns the clean fields. */
-export async function links(db, role, { studentId, teacherId, childIds } = {}) {
+/**
+ * Checks role links (student record, staff record, children) exist and returns the clean fields.
+ * A student record has at most one student login (students can sign in with their ID), so
+ * nobody can claim a student who already has one. `exceptId`: the account being edited.
+ */
+export async function links(db, role, { studentId, teacherId, childIds } = {}, exceptId = null) {
   const exists = async (col, id) => typeof id === "string" && id.length <= 40 && !!(await db.collection(col).findOne({ _id: id }, { projection: { _id: 1 } }));
   const out = { studentId: null, teacherId: null, childIds: [] };
   if (role === "student" && studentId) {
     if (!(await exists("students", studentId))) bad(`No student record with ID ${studentId}. Check with the school office.`);
+    const taken = await db.collection("users").findOne({ role: "student", studentId, ...(exceptId ? { _id: { $ne: exceptId } } : {}) }, { projection: { _id: 1 } });
+    if (taken) bad(`Student ${studentId} already has an account. Ask the school office for help signing in.`);
     out.studentId = studentId;
   }
   if (role === "teacher" && teacherId) {
@@ -49,6 +56,25 @@ export async function links(db, role, { studentId, teacherId, childIds } = {}) {
     out.childIds = ids;
   }
   return out;
+}
+
+/**
+ * The email for an account made by an admin. Student accounts linked to their record may have
+ * none (young students often don't): they sign in with their student ID. Returns null for none.
+ */
+export function accountEmail(v, role, studentId) {
+  if ((v === undefined || v === null || String(v).trim() === "") && role === "student") {
+    if (!studentId) bad("A student account with no email must be linked to a student record (they sign in with its ID).");
+    return null;
+  }
+  return email(v);
+}
+
+/** A temporary password that is easy to read off a printed slip: 6 letters, 2 digits (no look-alikes). */
+export function readablePassword() {
+  const letters = "abcdefghjkmnpqrstuvwxyz", digits = "23456789";
+  const pick = (set, n) => Array.from(crypto.randomBytes(n), (b) => set[b % set.length]).join("");
+  return pick(letters, 6) + pick(digits, 2);
 }
 
 export const newUserId = () => "USR-" + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();

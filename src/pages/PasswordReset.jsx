@@ -47,9 +47,55 @@ export function ForgotPassword() {
           <>
             <label>Email<input className="input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@brighterstep.test" /></label>
             <button className="btn block" disabled={busy}>{busy ? "Sending…" : "Send reset link"}</button>
+            <p className="hint" style={{ margin: 0 }}>Sign in with a student ID and no email? Ask the school office for a new temporary password.</p>
           </>
         )}
         <p style={{ textAlign: "center", margin: 0, fontSize: 13 }}><Link className="link" to="/login">Back to sign in</Link></p>
+      </form>
+    </AuthShell>
+  );
+}
+
+/** First sign-in on a temporary password from the school: the person must choose their own first. */
+export function FirstPassword() {
+  const { user, changePassword, logout } = useAuth();
+  const [current, setCurrent] = useState("");
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const problems = pw ? passwordProblems(pw) : [];
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (pw !== confirm) return setError("New passwords don't match.");
+    setBusy(true);
+    try {
+      await changePassword(current, pw); // the app opens once this succeeds
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthShell>
+      <form className="login-form form" onSubmit={submit}>
+        <div>
+          <h2>Set your password</h2>
+          <p style={{ color: "var(--muted)", margin: "8px 0 14px" }}>
+            Welcome, {user.name}. You signed in with a temporary password from the school.
+            Choose your own password to continue: at least 8 characters with a letter and a number.
+          </p>
+        </div>
+        {error && <div className="alert error" role="alert">{error}</div>}
+        <label>Temporary password<PasswordInput value={current} onChange={setCurrent} autoComplete="current-password" label="Temporary password" /></label>
+        <label>New password<PasswordInput value={pw} onChange={setPw} autoComplete="new-password" label="New password" /></label>
+        {pw && <small style={{ marginTop: -6, color: problems.length ? "var(--red)" : "var(--green)" }}>{problems.length ? `Needs ${problems.join(", ")}` : "✓ Strong enough"}</small>}
+        <label>Confirm new password<PasswordInput value={confirm} onChange={setConfirm} autoComplete="new-password" label="Confirm new password" /></label>
+        <button className="btn block" disabled={busy}>{busy ? "Saving…" : "Save and continue"}</button>
+        <p style={{ textAlign: "center", margin: 0, fontSize: 13 }}><button type="button" className="link" onClick={logout}>Sign out</button></p>
       </form>
     </AuthShell>
   );

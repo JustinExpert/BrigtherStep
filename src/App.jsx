@@ -12,6 +12,7 @@ const page = (load, name = "default") => lazy(() => load().then((m) => ({ defaul
 const Register = page(() => import("./pages/Register.jsx"));
 const ForgotPassword = page(() => import("./pages/PasswordReset.jsx"), "ForgotPassword");
 const ResetPassword = page(() => import("./pages/PasswordReset.jsx"), "ResetPassword");
+const FirstPassword = page(() => import("./pages/PasswordReset.jsx"), "FirstPassword");
 const MyAccount = page(() => import("./pages/MyAccount.jsx"));
 const Users = page(() => import("./pages/Users.jsx"));
 const SchoolSetup = page(() => import("./pages/SchoolSetup.jsx"));
@@ -43,6 +44,7 @@ function RequireAuth() {
   const location = useLocation();
   if (checking) return <PageSkeleton full />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (user.mustChangePassword) return <FirstPassword />; // nothing else opens until they set their own
   if (status === "error") {
     return (
       <div role="alert" style={{ padding: 32 }}>

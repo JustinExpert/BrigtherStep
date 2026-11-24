@@ -52,8 +52,10 @@ try {
   // Snapshot of the sample closed year (2025–2026); its grades are in DATA.grades.
   await db.collection("year_archives").insertMany(DATA.archives.map(({ id, ...a }) => ({ _id: id, ...a })));
 
-  // Indexes for the queries the app makes (and one unique rule: one account per email).
-  await db.collection("users").createIndex({ email: 1 }, { unique: true });
+  // Indexes for the queries the app makes (and one unique rule: one account per email;
+  // sparse because student accounts may have no email and sign in with their student ID).
+  await db.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true });
+  await db.collection("users").createIndex({ studentId: 1 }, { sparse: true });
   await db.collection("students").createIndex({ class: 1, roll: 1 });
   // Grades and activities are always read for one school year, so `year` leads (same as api/_lib/access.js).
   await db.collection("grades").createIndex({ studentId: 1, year: 1, published: 1 });

@@ -89,9 +89,9 @@ export default function Login() {
         </div>
         {location.state?.notice && <div className="alert info">{location.state.notice}</div>}
         {error && <div className="alert error" role="alert">{error}</div>}
-        <label>Email
-          <input className="input" type="email" autoComplete="username" required value={email}
-            onChange={(e) => setEmail(e.target.value)} placeholder="you@brighterstep.test" />
+        <label>Email or student ID
+          <input className="input" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder="you@school.edu or STU-43105" />
         </label>
         <label>Password<PasswordInput value={password} onChange={setPassword} /></label>
         <div className="row-between">
